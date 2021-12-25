@@ -1,7 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 mod fsevent;
 mod fsevent_flags;
-mod pb;
+mod fsevent_pb;
 
 use fsevent::FsEvent;
 

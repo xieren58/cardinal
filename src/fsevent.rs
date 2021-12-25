@@ -1,5 +1,5 @@
 use super::fsevent_flags::EventFlags;
-use super::pb;
+use super::fsevent_pb as pb;
 
 use fsevent_sys::FSEventStreamEventId;
 use prost::Message;
