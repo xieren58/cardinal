@@ -50,7 +50,7 @@ pub fn take_fs_events() -> Vec<FsEvent> {
 
 pub async fn processor(mut receiver: UnboundedReceiver<Vec<FsEvent>>) -> Result<()> {
     let mut core_paths = BTreeSet::new();
-    for events in receiver.recv().await {
+    while let Some(events) = receiver.recv().await {
         for event in events {
             core_paths.insert(event.path.clone());
             fill_fs_event(event)?;
