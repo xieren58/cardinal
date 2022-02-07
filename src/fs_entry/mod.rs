@@ -16,12 +16,14 @@ use std::{
 
 use anyhow::{Context, Result};
 use bincode::{config::Configuration, Decode, Encode};
-use pathbytes::{o2b, p2b};
+use pathbytes::{b2p, o2b, p2b};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 use walkdir::{IntoIter, WalkDir};
 
-#[derive(Serialize, Deserialize, Decode, Encode, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(
+    Serialize, Deserialize, Decode, Encode, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug,
+)]
 pub enum FileType {
     Dir,
     File,
@@ -91,11 +93,11 @@ impl DiskEntry {
     /// This requires a mutable reference
     pub fn merge(&mut self, event: &FsEvent) {
         debug!("merge {:?} into database", event);
-        let mut path_segs = event.path.into_iter().peekable();
-
-        let seg = path_segs.next().map(o2b);
-        debug_assert_eq!(seg, Some(&*self.name));
-        debug_assert_eq!(self.name, b"/");
+        let event_path = p2b(&event.path)
+            .strip_prefix(&*self.name)
+            .expect("event path doesn't share a common prefix with the root.");
+        let event_path = b2p(&event_path);
+        let mut path_segs = event_path.into_iter().peekable();
         // Ensure we are not modifying the root. (When this feature is really
         // needed, add a match branch here for special-case this).
         debug_assert!(path_segs.peek().is_some());
