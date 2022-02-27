@@ -1,8 +1,12 @@
+#[cfg(test)]
+mod tests;
+
 use crate::fs_entry::DiskEntry;
 use crate::fsevent::{EventId, FsEvent};
 
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufWriter;
 use std::{io::BufReader, path::Path};
@@ -11,7 +15,7 @@ use tracing::{info, instrument};
 /// The overall database of Cardinal.
 ///
 /// It's created or loaded on app starts, stored into disk on app closes.
-#[derive(Decode, Encode)]
+#[derive(Decode, Encode, Serialize, Deserialize)]
 pub struct Database {
     /// The snapshot time of this file system tree.
     time: EventId,
@@ -37,7 +41,12 @@ impl Database {
     }
 
     pub fn merge(&mut self, event: &FsEvent) {
-        assert!(self.time.since < event.id);
+        assert!(
+            self.time.since < event.id,
+            "since: {}, event: {:?}",
+            self.time.since,
+            event
+        );
         self.time = EventId::now_with_id(event.id);
         self.fs_entry.merge(event)
     }

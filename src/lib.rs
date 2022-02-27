@@ -10,7 +10,7 @@ mod utils;
 
 pub use c::*;
 use consts::DB_PATH;
-use database::Database;
+pub use database::Database;
 use fsevent::FsEvent;
 pub use processor::take_fs_events;
 use processor::Processor;
@@ -125,7 +125,9 @@ fn spawn_event_watcher(since: FSEventStreamEventId) -> Receiver<FsEvent> {
         EventStream::new(
             vec!["/".into()],
             since,
-            Box::new(move |events| {
+            Box::new(move |mut events| {
+                // Fun fact, events here are not sorted by event id.
+                events.sort_by_key(|x| x.id);
                 for event in events {
                     sender.send(event).unwrap();
                 }
@@ -181,6 +183,7 @@ fn init_sdk() -> Result<()> {
         None => utils::current_event_id(),
     };
 
+    info!("Watching event since: {}", watch_event_since);
     // A global event watcher spawned on a dedicated thread.
     let receiver = spawn_event_watcher(watch_event_since);
     // A global event processor spawned on a dedicated thread.

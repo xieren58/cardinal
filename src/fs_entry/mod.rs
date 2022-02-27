@@ -46,14 +46,14 @@ impl From<fs::FileType> for FileType {
 }
 
 /// Most of the useful information for a disk node.
-#[derive(Serialize, Deserialize, Decode, Encode, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Decode, Encode, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Metadata {
-    file_type: FileType,
-    len: u64,
-    created: SystemTime,
-    modified: SystemTime,
-    accessed: SystemTime,
-    permissions_read_only: bool,
+    pub file_type: FileType,
+    pub len: u64,
+    pub created: SystemTime,
+    pub modified: SystemTime,
+    pub accessed: SystemTime,
+    pub permissions_read_only: bool,
 }
 
 impl From<fs::Metadata> for Metadata {
@@ -75,11 +75,11 @@ impl From<fs::Metadata> for Metadata {
 )]
 pub struct DiskEntry {
     /// WTF-8
-    name: Vec<u8>,
+    pub name: Vec<u8>,
     /// Is None when no permission.
-    metadata: Option<Metadata>,
+    pub metadata: Option<Metadata>,
     /// Is set to Some when entry is a folder.
-    entries: Vec<DiskEntry>,
+    pub entries: Vec<DiskEntry>,
 }
 
 impl DiskEntry {

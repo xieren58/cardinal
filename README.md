@@ -15,6 +15,9 @@ cargo run --release --example tree
 TODO: 
 
 [] merge should check access(create) time and event time.(however it's difficult on macOS since we have no way to get timestamp of a fsevent, maybe double check if it's present or not on merging?).
+[] only use fsevent for diff trigger rather than diff data provider? (which means ignore it's delete, modify or create, just checking the place.).
+[] use jwalk to maximize walkdir's performance?
+[] use tauri for UI layer
 
 Native GUI，cross platform core.
 Compressed BTree file system data on saved.
