@@ -23,11 +23,13 @@ pub struct Database {
     fs_entry: DiskEntry,
 }
 
+const CONFIG: bincode::config::Configuration = bincode::config::standard();
+
 impl Database {
     pub fn from_fs(path: &Path) -> Result<Self> {
         let file = File::open(path).context("load db from disk failed.")?;
         let mut file = BufReader::new(file);
-        let database = bincode::decode_from_std_read(&mut file, bincode::config::standard())
+        let database = bincode::decode_from_std_read(&mut file, CONFIG)
             .context("Decode failed.")?;
         Ok(database)
     }
@@ -35,18 +37,16 @@ impl Database {
     pub fn into_fs(&self, path: &Path) -> Result<()> {
         let file = File::create(path).context("open db file from disk failed.")?;
         let mut file = BufWriter::new(file);
-        bincode::encode_into_std_write(self, &mut file, bincode::config::standard())
+        bincode::encode_into_std_write(self, &mut file, CONFIG)
             .context("Encode failed.")?;
         Ok(())
     }
 
     pub fn merge(&mut self, event: &FsEvent) {
-        assert!(
-            self.time.since < event.id,
-            "since: {}, event: {:?}",
-            self.time.since,
-            event
-        );
+        if event.id < self.time.since {
+            info!("Ignore old event");
+            return;
+        }
         self.time = EventId::now_with_id(event.id);
         self.fs_entry.merge(Path::new("/").to_path_buf(), event)
     }
@@ -83,7 +83,10 @@ impl PartialDatabase {
 
     pub fn merge(&mut self, event: &FsEvent) {
         info!(?event, "Merge event into partial db");
-        assert!(self.time.since < event.id);
+        if event.id > self.time.since {
+            info!("Ignore old event");
+            return;
+        }
         self.time = EventId::now_with_id(event.id);
         self.fs_entry.merge(Path::new("/").to_path_buf(), event)
     }
