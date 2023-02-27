@@ -45,22 +45,24 @@ fn walk_builder(path: &Path) -> ignore::WalkBuilder {
 
 fn parallel_walker(path: &Path) -> ignore::WalkParallel {
     let threads = num_cpus::get_physical();
-    dbg!(threads);
+    info!("scanning {:?} with {} threads", path, threads);
     walk_builder(path).threads(threads).build_parallel()
 }
 
+#[allow(dead_code)]
 fn single_walker(path: &Path) -> ignore::Walk {
     walk_builder(path).build()
 }
 
 fn snapshot_fs(conn: &mut CardinalDbConnection) -> Result<()> {
     let (raw_entry_sender, raw_entry_receiver) = bounded(MAX_RAW_ENTRY_COUNT);
-
-    std::thread::spawn(move || {
+    {
         let walkdir = parallel_walker(Path::new("/"));
-        let mut visitor_builder = fs_visitor::VisitorBuilder { raw_entry_sender };
-        walkdir.visit(&mut visitor_builder);
-    });
+        std::thread::spawn(move || {
+            let mut visitor_builder = fs_visitor::VisitorBuilder { raw_entry_sender };
+            walkdir.visit(&mut visitor_builder);
+        });
+    }
 
     let mut last_time = Instant::now();
     let mut insert_num = 0;
@@ -236,18 +238,18 @@ impl Database {
             }
             ScanType::Folder => {
                 // TODO: Remove all existing entries prefixed with this dir path
-                let walkdir = single_walker(&fs_event.path);
-                for entry in walkdir {
-                    if let Ok(entry) = entry {
-                        if let Ok(metadata) = entry.metadata() {
-                            let entry = DiskEntry {
-                                path: entry.path().to_path_buf(),
-                                meta: metadata.into(),
-                            }
-                            .to_raw()
-                            .context("Encode entry failed,")?;
-                            self.conn.save_entry(&entry).context("Save entry failed,")?;
-                        }
+                let (raw_entry_sender, raw_entry_receiver) = bounded(MAX_RAW_ENTRY_COUNT);
+                {
+                    let walkdir = parallel_walker(&fs_event.path);
+                    std::thread::spawn(move || {
+                        let mut visitor_builder = fs_visitor::VisitorBuilder { raw_entry_sender };
+                        walkdir.visit(&mut visitor_builder);
+                    });
+                }
+
+                for entry in raw_entry_receiver {
+                    for entry in entry {
+                        self.conn.save_entry(&entry).context("Save entry failed,")?;
                     }
                 }
             }

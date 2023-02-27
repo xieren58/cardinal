@@ -66,7 +66,15 @@ impl MacEventFlag {
     pub fn scan_type(&self) -> ScanType {
         let event_type = self.event_type();
         let is_dir = matches!(event_type, EventType::Dir);
-        if self.contains(MacEventFlag::kFSEventStreamEventFlagMustScanSubDirs)
+        if self.contains(MacEventFlag::kFSEventStreamEventFlagNone) {
+            // Strange event, doesn't know when it happens, processing it using a generic way
+            // e.g. new event: fs_event=FsEvent { path: "/.docid/16777229/changed/782/src=0,dst=41985052", flag: kFSEventStreamEventFlagNone, id: 471533015 }
+            if is_dir {
+                ScanType::Folder
+            } else {
+                ScanType::SingleNode
+            }
+        } else if self.contains(MacEventFlag::kFSEventStreamEventFlagMustScanSubDirs)
             | self.contains(MacEventFlag::kFSEventStreamEventFlagUserDropped)
             | self.contains(MacEventFlag::kFSEventStreamEventFlagKernelDropped)
         {

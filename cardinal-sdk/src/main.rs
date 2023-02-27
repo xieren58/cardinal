@@ -9,6 +9,7 @@ mod utils;
 
 use database::Database;
 use fsevent::FsEvent;
+use tracing::debug;
 use tracing::error;
 use tracing::info;
 
@@ -52,7 +53,7 @@ async fn main() {
 }
 
 fn merge_event(db: &mut Database, fs_event: FsEvent) {
-    info!(?fs_event, "new event:");
+    debug!(?fs_event, "new event:");
     if let Err(e) = db.merge_event(fs_event) {
         error!(?e, "merge event failed:");
     }
