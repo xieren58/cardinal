@@ -2,7 +2,9 @@ use crate::fsevent::FsEvent;
 use anyhow::{bail, Result};
 use core_foundation::base::TCFType;
 use core_foundation::{array::CFArray, string::CFString};
-use fsevent_sys::core_foundation::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun};
+use fsevent_sys::core_foundation::{
+    kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun, CFTimeInterval,
+};
 use fsevent_sys::{
     kFSEventStreamCreateFlagFileEvents, kFSEventStreamCreateFlagNoDefer, FSEventStreamContext,
     FSEventStreamCreate, FSEventStreamEventFlags, FSEventStreamEventId, FSEventStreamRef,
@@ -11,7 +13,6 @@ use fsevent_sys::{
 use std::ptr;
 use std::{ffi::c_void, slice};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
-use tracing::warn;
 
 type EventsCallback = Box<dyn FnMut(Vec<FsEvent>) + Send>;
 
@@ -21,8 +22,9 @@ struct EventStream {
 
 impl EventStream {
     pub fn new(
-        paths: Vec<String>,
-        raw_event_id: FSEventStreamEventId,
+        paths: &[&str],
+        since_event_id: FSEventStreamEventId,
+        latency: CFTimeInterval,
         callback: EventsCallback,
     ) -> Self {
         extern "C" fn drop_callback(info: *const c_void) {
@@ -56,11 +58,11 @@ impl EventStream {
             callback(events);
         }
 
-        let paths: Vec<_> = paths.into_iter().map(|x| CFString::new(&x)).collect();
+        let paths: Vec<_> = paths.iter().map(|&x| CFString::new(x)).collect();
         let paths = CFArray::from_CFTypes(&paths);
         let context = Box::leak(Box::new(FSEventStreamContext {
             version: 0,
-            info: Box::leak(Box::new(callback)) as *mut _ as _,
+            info: Box::leak(Box::new(callback)) as *mut _ as *mut _,
             retain: None,
             release: Some(drop_callback),
             copy_description: None,
@@ -72,15 +74,15 @@ impl EventStream {
                 raw_callback,
                 context,
                 paths.as_concrete_TypeRef() as _,
-                raw_event_id,
-                0.1,
+                since_event_id,
+                latency,
                 kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents,
             )
         };
         Self { stream }
     }
 
-    fn block_watch(self) -> Result<()> {
+    fn block_on(self) -> Result<()> {
         let run_loop = unsafe { CFRunLoopGetCurrent() };
         unsafe {
             FSEventStreamScheduleWithRunLoop(self.stream, run_loop as _, kCFRunLoopDefaultMode as _)
@@ -94,18 +96,21 @@ impl EventStream {
     }
 }
 
-pub fn spawn_event_watcher(raw_event_id: FSEventStreamEventId) -> UnboundedReceiver<Vec<FsEvent>> {
+pub fn spawn_event_watcher(
+    since_event_id: FSEventStreamEventId,
+) -> UnboundedReceiver<Vec<FsEvent>> {
     let (sender, receiver) = unbounded_channel();
     std::thread::spawn(move || {
         EventStream::new(
-            vec!["/".into()],
-            raw_event_id,
+            &["/"],
+            since_event_id,
+            0.1,
             Box::new(move |events| {
                 // Fun fact, events here are not sorted by event id.
                 sender.send(events).unwrap();
             }),
         )
-        .block_watch()
+        .block_on()
         .unwrap();
     });
     receiver

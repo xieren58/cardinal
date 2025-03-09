@@ -12,21 +12,21 @@ pub use c::*;
 use consts::DB_PATH;
 pub use database::Database;
 use fsevent::FsEvent;
-pub use processor::take_fs_events;
 use processor::Processor;
+pub use processor::take_fs_events;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use core_foundation::{
     array::CFArray,
     base::TCFType,
-    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun},
+    runloop::{CFRunLoopGetCurrent, CFRunLoopRun, kCFRunLoopDefaultMode},
     string::CFString,
 };
 use crossbeam::channel::{self, Receiver};
 use fsevent_sys::{
-    kFSEventStreamCreateFlagFileEvents, kFSEventStreamCreateFlagNoDefer, FSEventStreamContext,
-    FSEventStreamCreate, FSEventStreamEventFlags, FSEventStreamEventId, FSEventStreamRef,
-    FSEventStreamScheduleWithRunLoop, FSEventStreamStart,
+    FSEventStreamContext, FSEventStreamCreate, FSEventStreamEventFlags, FSEventStreamEventId,
+    FSEventStreamRef, FSEventStreamScheduleWithRunLoop, FSEventStreamStart,
+    kFSEventStreamCreateFlagFileEvents, kFSEventStreamCreateFlagNoDefer,
 };
 use runtime::runtime;
 use tracing::{error, info, warn};

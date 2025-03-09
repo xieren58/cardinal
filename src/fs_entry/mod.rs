@@ -3,21 +3,21 @@ mod tests;
 
 use crate::fsevent::{EventFlag, FsEvent};
 
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, BufWriter};
 use std::iter::Peekable;
 use std::{
     fs::{self, File},
-    io::prelude::*,
     io::BufReader,
+    io::prelude::*,
     path::{Path, PathBuf},
     time::SystemTime,
 };
 
 use anyhow::{Context, Result};
-use bincode::{config::Configuration, Decode, Encode};
+use bincode::{Decode, Encode, config::Configuration};
 use pathbytes::{b2p, o2b, p2b};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};

@@ -5,7 +5,7 @@ use crate::fsevent::EventId;
 use crate::{fs_entry::DiskEntry, fsevent::FsEvent};
 use crate::{runtime, utils};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use crossbeam::channel::{self, Receiver, Sender, TryRecvError, TrySendError};
 use fsevent_sys::FSEventStreamEventId;
 use once_cell::sync::OnceCell;

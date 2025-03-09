@@ -5,7 +5,7 @@ pub use event_flag::EventFlag;
 pub use event_flag::MacEventFlag;
 pub use event_id::EventId;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use fsevent_sys::FSEventStreamEventId;
 
 use std::{
