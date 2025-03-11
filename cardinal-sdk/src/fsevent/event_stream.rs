@@ -2,13 +2,12 @@ use crate::fsevent::FsEvent;
 use anyhow::{Result, bail};
 use core_foundation::base::TCFType;
 use core_foundation::{array::CFArray, string::CFString};
-use fsevent_sys::core_foundation::{
-    CFRunLoopGetCurrent, CFRunLoopRun, CFTimeInterval, kCFRunLoopDefaultMode,
-};
+use dispatch2::ffi::{DISPATCH_QUEUE_SERIAL, dispatch_queue_create};
 use fsevent_sys::{
     FSEventStreamContext, FSEventStreamCreate, FSEventStreamEventFlags, FSEventStreamEventId,
-    FSEventStreamRef, FSEventStreamScheduleWithRunLoop, FSEventStreamStart,
-    kFSEventStreamCreateFlagFileEvents, kFSEventStreamCreateFlagNoDefer,
+    FSEventStreamRef, FSEventStreamSetDispatchQueue, FSEventStreamStart,
+    core_foundation::CFTimeInterval, kFSEventStreamCreateFlagFileEvents,
+    kFSEventStreamCreateFlagNoDefer,
 };
 use std::ptr;
 use std::{ffi::c_void, slice};
@@ -83,15 +82,13 @@ impl EventStream {
     }
 
     pub fn block_on(self) -> Result<()> {
-        let run_loop = unsafe { CFRunLoopGetCurrent() };
-        unsafe {
-            FSEventStreamScheduleWithRunLoop(self.stream, run_loop as _, kCFRunLoopDefaultMode as _)
-        };
+        let queue =
+            unsafe { dispatch_queue_create(c"cardinal-sdk-queue".as_ptr(), DISPATCH_QUEUE_SERIAL) };
+        unsafe { FSEventStreamSetDispatchQueue(self.stream, queue) };
         let result = unsafe { FSEventStreamStart(self.stream) };
         if result == 0 {
             bail!("fs event stream start failed.");
         }
-        unsafe { CFRunLoopRun() };
         Ok(())
     }
 }
