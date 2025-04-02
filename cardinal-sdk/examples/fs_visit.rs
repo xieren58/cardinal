@@ -66,7 +66,7 @@ fn construct_nodex_graph(
     let slab_node = SlabNode {
         parent,
         children: vec![],
-        name: node.name.clone(),
+        name: node.data.name.clone(),
     };
     let index = slab.insert(slab_node);
     slab[index].children = node
@@ -84,22 +84,14 @@ fn construct_name_index_and_namepool(
     name_index: &mut BTreeMap<String, Vec<Arc<Node>>>,
     name_pool: &mut NamePool,
 ) {
-    if let Some(nodes) = name_index.get_mut(&node.name) {
+    if let Some(nodes) = name_index.get_mut(&node.data.name) {
         nodes.push(node.clone());
     } else {
-        name_pool.push(&node.name);
-        name_index.insert(node.name.clone(), vec![node.clone()]);
+        name_pool.push(&node.data.name);
+        name_index.insert(node.data.name.clone(), vec![node.clone()]);
     };
     for node in &node.children {
-        if let Some(nodes) = name_index.get_mut(&node.name) {
-            nodes.push(node.clone());
-        } else {
-            name_pool.push(&node.name);
-            name_index.insert(node.name.clone(), vec![node.clone()]);
-        };
-        for grand_child in &node.children {
-            construct_name_index_and_namepool(&grand_child, name_index, name_pool);
-        }
+        construct_name_index_and_namepool(&node, name_index, name_pool);
     }
 }
 
@@ -135,7 +127,7 @@ fn main() {
             // TODO(ldm0): this can be parallelized
             if let Some(nodes) = name_index.get(name) {
                 for node in nodes {
-                    println!("[{}] key: {}", i, node.name);
+                    println!("[{}] key: {}", i, node.data.name);
                 }
             }
         }
