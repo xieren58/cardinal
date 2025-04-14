@@ -201,82 +201,66 @@ fn main() -> Result<()> {
         } else if line == "/bye" {
             break;
         }
-        if line.contains('/') {
-            let segments = query_segmentation(line);
-            let search_time = Instant::now();
-            let mut node_set: Option<Vec<usize>> = None;
-            if segments.is_empty() {
-                eprintln!("unprocessed query: {:?}", segments);
-                continue;
-            }
-            for segment in &segments {
-                if let Some(nodes) = &node_set {
-                    let mut new_node_set = Vec::with_capacity(nodes.len());
-                    for &node in nodes {
-                        let childs = &slab[node].children;
-                        for child in childs {
-                            if match segment {
-                                Segment::Substr(substr) => slab[*child].name.contains(*substr),
-                                Segment::Prefix(prefix) => slab[*child].name.starts_with(*prefix),
-                                Segment::Exact(exact) => slab[*child].name == *exact,
-                                Segment::Suffix(suffix) => slab[*child].name.ends_with(*suffix),
-                            } {
-                                new_node_set.push(*child);
-                            }
-                        }
-                    }
-                    node_set = Some(new_node_set);
-                } else {
-                    let names: Vec<_> = match segment {
-                        Segment::Substr(substr) => name_pool.search_substr(*substr).collect(),
-                        Segment::Prefix(prefix) => {
-                            let mut buffer = vec![0u8];
-                            buffer.extend_from_slice(prefix.as_bytes());
-                            name_pool.search_prefix(&buffer).collect()
-                        }
-                        Segment::Exact(exact) => {
-                            let mut buffer = vec![0u8];
-                            buffer.extend_from_slice(exact.as_bytes());
-                            buffer.push(0);
-                            name_pool.search_exact(&buffer).collect()
-                        }
-                        Segment::Suffix(suffix) => {
-                            // Query contains nul is very rare
-                            let suffix = CString::new(*suffix).expect("Query contains nul");
-                            name_pool.search_suffix(&suffix).collect()
-                        }
-                    };
-                    let mut nodes = Vec::with_capacity(names.len());
-                    for name in names {
-                        nodes.extend_from_slice(
-                            name_index
-                                .get(name)
-                                .context("Name index or name pool corrupted")?,
-                        );
-                    }
-                    node_set = Some(nodes);
-                }
-            }
-            let search_time = search_time.elapsed();
-            for (i, node) in node_set.unwrap().into_iter().enumerate() {
-                println!("[{}] {}", i, slab[node].path(&slab));
-            }
-            dbg!(search_time);
-        } else {
-            // Search out all leafs that contain the substring
-            // e.g. "foo": ["/System/foo", "/System/Library/aaafoo"]
-            // "/System/Library/aaafool/heck" won't be presented
-            let search_time = Instant::now();
-            for (i, name) in name_pool.search_substr(line).enumerate() {
-                // TODO(ldm0): this can be parallelized
-                if let Some(nodes) = name_index.get(name) {
-                    for &node in nodes {
-                        println!("[{}] {}", i, slab[node].path(&slab));
-                    }
-                }
-            }
-            dbg!(search_time.elapsed());
+        let segments = query_segmentation(line);
+        let search_time = Instant::now();
+        let mut node_set: Option<Vec<usize>> = None;
+        if segments.is_empty() {
+            eprintln!("unprocessed query: {:?}", segments);
+            continue;
         }
+        for segment in &segments {
+            if let Some(nodes) = &node_set {
+                let mut new_node_set = Vec::with_capacity(nodes.len());
+                for &node in nodes {
+                    let childs = &slab[node].children;
+                    for child in childs {
+                        if match segment {
+                            Segment::Substr(substr) => slab[*child].name.contains(*substr),
+                            Segment::Prefix(prefix) => slab[*child].name.starts_with(*prefix),
+                            Segment::Exact(exact) => slab[*child].name == *exact,
+                            Segment::Suffix(suffix) => slab[*child].name.ends_with(*suffix),
+                        } {
+                            new_node_set.push(*child);
+                        }
+                    }
+                }
+                node_set = Some(new_node_set);
+            } else {
+                let names: Vec<_> = match segment {
+                    Segment::Substr(substr) => name_pool.search_substr(*substr).collect(),
+                    Segment::Prefix(prefix) => {
+                        let mut buffer = vec![0u8];
+                        buffer.extend_from_slice(prefix.as_bytes());
+                        name_pool.search_prefix(&buffer).collect()
+                    }
+                    Segment::Exact(exact) => {
+                        let mut buffer = vec![0u8];
+                        buffer.extend_from_slice(exact.as_bytes());
+                        buffer.push(0);
+                        name_pool.search_exact(&buffer).collect()
+                    }
+                    Segment::Suffix(suffix) => {
+                        // Query contains nul is very rare
+                        let suffix = CString::new(*suffix).expect("Query contains nul");
+                        name_pool.search_suffix(&suffix).collect()
+                    }
+                };
+                let mut nodes = Vec::with_capacity(names.len());
+                for name in names {
+                    nodes.extend_from_slice(
+                        name_index
+                            .get(name)
+                            .context("Name index or name pool corrupted")?,
+                    );
+                }
+                node_set = Some(nodes);
+            }
+        }
+        let search_time = search_time.elapsed();
+        for (i, node) in node_set.unwrap().into_iter().enumerate() {
+            println!("[{}] {}", i, slab[node].path(&slab));
+        }
+        dbg!(search_time);
     }
 
     {
