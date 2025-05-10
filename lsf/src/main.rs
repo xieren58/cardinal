@@ -1,4 +1,5 @@
 mod cache;
+mod cli;
 mod query;
 
 use anyhow::{Context, Result, bail};
@@ -10,6 +11,7 @@ use cardinal_sdk::{
     utils::current_event_id,
 };
 use clap::Parser;
+use cli::Cli;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use fswalk::{Node, WalkData, walk_it};
 use namepool::NamePool;
@@ -90,13 +92,6 @@ fn construct_name_index(slab: &Slab<SlabNode>, name_index: &mut BTreeMap<String,
             name_index.insert(node.name.clone(), vec![i]);
         };
     }
-}
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long, default_value = "false")]
-    /// Open enabled, cache was ignored and filesystem will be rewalked.
-    refresh: bool,
 }
 
 fn walkfs_to_slab() -> (usize, Slab<SlabNode>) {
@@ -403,7 +398,7 @@ fn main() -> Result<()> {
                      name_index,
                      ..
                  }| SearchCache::new(last_event_id, slab_root, slab, name_index),
-            ) // 从 PersistentStorage 中解构
+            )
             .unwrap_or_else(|e| {
                 eprintln!("Failed to read cache: {:?}. Re-walking filesystem...", e);
                 let (slab_root, slab) = walkfs_to_slab();
