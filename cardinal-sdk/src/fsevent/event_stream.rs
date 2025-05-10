@@ -6,7 +6,7 @@ use fsevent_sys::{
     FSEventStreamContext, FSEventStreamCreate, FSEventStreamEventFlags, FSEventStreamEventId,
     FSEventStreamRef, FSEventStreamSetDispatchQueue, FSEventStreamStart,
     core_foundation::CFTimeInterval, kFSEventStreamCreateFlagFileEvents,
-    kFSEventStreamCreateFlagNoDefer,
+    kFSEventStreamCreateFlagNoDefer, kFSEventStreamCreateFlagWatchRoot,
 };
 use std::{ffi::c_void, ptr, slice};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
@@ -73,7 +73,9 @@ impl EventStream {
                 paths.as_concrete_TypeRef() as _,
                 since_event_id,
                 latency,
-                kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents,
+                kFSEventStreamCreateFlagNoDefer
+                    | kFSEventStreamCreateFlagFileEvents
+                    | kFSEventStreamCreateFlagWatchRoot,
             )
         };
         Self { stream }

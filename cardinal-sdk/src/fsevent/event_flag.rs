@@ -38,10 +38,14 @@ pub enum EventType {
     Hardlink,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanType {
+    /// Scan a single node
     SingleNode,
+    /// Scan the whole folder, including sub-folders.
     Folder,
     /// Something wrong happened, do re-indexing.
+    /// Should only happen with `kFSEventStreamCreateFlagWatchRoot` set in EventStream::new().
     ReScan,
     /// Do nothing, since event id is always updated.
     Nop,
@@ -77,13 +81,11 @@ impl EventFlag {
             | self.contains(EventFlag::UserDropped)
             | self.contains(EventFlag::KernelDropped)
         {
-            ScanType::ReScan
+            ScanType::Folder
         } else if self.contains(EventFlag::EventIdsWrapped) | self.contains(EventFlag::HistoryDone)
         {
             ScanType::Nop
         } else if self.contains(EventFlag::RootChanged) {
-            // Should never happen since we are watching "/"
-            assert!(false);
             ScanType::ReScan
         } else if self.contains(EventFlag::Unmount) | self.contains(EventFlag::Mount) {
             assert!(is_dir);
