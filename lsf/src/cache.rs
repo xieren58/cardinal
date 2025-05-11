@@ -174,11 +174,10 @@ impl SearchCache {
                 };
                 let mut nodes = Vec::with_capacity(names.len());
                 for name in names {
-                    nodes.extend_from_slice(
-                        self.name_index
-                            .get(name)
-                            .context("Name index or name pool corrupted")?,
-                    );
+                    // namepool doesn't shrink, so it can contains non-existng names. Therefore, we don't error out on None branch here.
+                    if let Some(x) = self.name_index.get(name) {
+                        nodes.extend_from_slice(x);
+                    }
                 }
                 // name_pool doesn't dedup, so we need to dedup the results here.
                 nodes.sort_unstable();
@@ -601,6 +600,58 @@ mod tests {
 
         cache.handle_fs_events(mock_events);
 
+        assert_eq!(cache.slab.len(), 2);
+        assert_eq!(cache.name_index.len(), 2);
+        assert_eq!(cache.search("new_file.txt").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_handle_fs_event_removal() {
+        let temp_dir = TempDir::new("test_events").expect("Failed to create temp directory");
+        let temp_path = temp_dir.path();
+        fs::File::create(temp_path.join("new_file.txt")).expect("Failed to create file");
+
+        let mut cache = SearchCache::walk_fs(temp_dir.path().to_path_buf());
+
+        assert_eq!(cache.slab.len(), 2);
+        assert_eq!(cache.name_index.len(), 2);
+
+        fs::remove_file(temp_path.join("new_file.txt")).expect("Failed to remove file");
+
+        let mock_events = vec![FsEvent {
+            path: temp_path.join("new_file.txt"),
+            id: cache.last_event_id + 1,
+            flag: EventFlag::ItemRemoved,
+        }];
+
+        cache.handle_fs_events(mock_events);
+
+        // Though the file in fsevents removed, we should still preserve it since it exists on disk.
+        assert_eq!(cache.slab.len(), 1);
+        assert_eq!(cache.name_index.len(), 1);
+        assert_eq!(cache.search("new_file.txt").unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_handle_fs_event_removal_fake() {
+        let temp_dir = TempDir::new("test_events").expect("Failed to create temp directory");
+        let temp_path = temp_dir.path();
+        let mut cache = SearchCache::walk_fs(temp_dir.path().to_path_buf());
+
+        assert_eq!(cache.slab.len(), 1);
+        assert_eq!(cache.name_index.len(), 1);
+
+        fs::File::create(temp_path.join("new_file.txt")).expect("Failed to create file");
+
+        let mock_events = vec![FsEvent {
+            path: temp_path.join("new_file.txt"),
+            id: cache.last_event_id + 1,
+            flag: EventFlag::ItemRemoved,
+        }];
+
+        cache.handle_fs_events(mock_events);
+
+        // Though the file in fsevents removed, we should still preserve it since it exists on disk.
         assert_eq!(cache.slab.len(), 2);
         assert_eq!(cache.name_index.len(), 2);
         assert_eq!(cache.search("new_file.txt").unwrap().len(), 1);
