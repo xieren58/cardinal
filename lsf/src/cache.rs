@@ -154,12 +154,14 @@ impl SearchCache {
                 let names: Vec<_> = match segment {
                     Segment::Substr(substr) => self.name_pool.search_substr(substr).collect(),
                     Segment::Prefix(prefix) => {
-                        let mut buffer = vec![0u8];
+                        let mut buffer = Vec::with_capacity(prefix.len() + 1);
+                        buffer.push(0);
                         buffer.extend_from_slice(prefix.as_bytes());
                         self.name_pool.search_prefix(&buffer).collect()
                     }
                     Segment::Exact(exact) => {
-                        let mut buffer = vec![0u8];
+                        let mut buffer = Vec::with_capacity(exact.len() + 2);
+                        buffer.push(0);
                         buffer.extend_from_slice(exact.as_bytes());
                         buffer.push(0);
                         self.name_pool.search_exact(&buffer).collect()
