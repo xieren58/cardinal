@@ -178,6 +178,9 @@ impl SearchCache {
                             .context("Name index or name pool corrupted")?,
                     );
                 }
+                // name_pool doesn't dedup, so we need to dedup the results here.
+                nodes.sort_unstable();
+                nodes.dedup();
                 node_set = Some(nodes);
             }
         }
