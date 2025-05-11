@@ -695,4 +695,33 @@ mod tests {
         assert_eq!(cache.name_index.len(), 2);
         assert_eq!(cache.search("new_file.txt").unwrap().len(), 1);
     }
+
+    #[test]
+    fn test_handle_fs_event_rescan() {
+        let temp_dir = TempDir::new("test_events").expect("Failed to create temp directory");
+        let temp_path = temp_dir.path();
+        fs::File::create(temp_path.join("new_file.txt")).expect("Failed to create file");
+        fs::File::create(temp_path.join("new_file2.txt")).expect("Failed to create file");
+        fs::File::create(temp_path.join("new_file3.txt")).expect("Failed to create file");
+        fs::create_dir_all(temp_path.join("src/foo")).expect("Failed to create dir");
+        fs::File::create(temp_path.join("src/foo/good.rs")).expect("Failed to create file");
+        let mut cache = SearchCache::walk_fs(temp_dir.path().to_path_buf());
+
+        assert_eq!(cache.slab.len(), 7);
+        assert_eq!(cache.name_index.len(), 7);
+
+        let mock_events = vec![FsEvent {
+            path: temp_path.to_path_buf(),
+            id: cache.last_event_id + 1,
+            flag: EventFlag::RootChanged,
+        }];
+
+        cache.handle_fs_events(mock_events);
+
+        assert_eq!(cache.slab.len(), 7);
+        assert_eq!(cache.name_index.len(), 7);
+        assert_eq!(cache.search("new_file").unwrap().len(), 3);
+        assert_eq!(cache.search("good.rs").unwrap().len(), 1);
+        assert_eq!(cache.search("foo").unwrap().len(), 1);
+    }
 }
