@@ -6,16 +6,19 @@ use std::{
     collections::BTreeMap,
     fs::{self, File},
     io::{BufReader, BufWriter},
+    path::PathBuf,
     thread::available_parallelism,
     time::Instant,
 };
 use typed_num::Num;
 
-const LSF_VERSION: i64 = 0;
+const LSF_VERSION: i64 = 1;
 
 #[derive(Encode, Decode)]
 pub struct PersistentStorage {
     pub version: Num<LSF_VERSION>,
+    pub path: PathBuf,
+    // root index of the slab
     pub slab_root: usize,
     pub slab: Slab<SlabNode>,
     pub name_index: BTreeMap<String, Vec<usize>>,

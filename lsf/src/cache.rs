@@ -3,7 +3,7 @@ use crate::{
     persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file},
     query::{Segment, query_segmentation},
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use cardinal_sdk::{
     fsevent::{EventFlag, FsEvent, ScanType},
     utils::current_event_id,
@@ -13,14 +13,15 @@ use namepool::NamePool;
 use slab::Slab;
 use std::{
     collections::BTreeMap,
-    ffi::CString,
+    ffi::{CString, OsStr},
     io::ErrorKind,
-    path::{Path, PathBuf},
+    path::{MAIN_SEPARATOR_STR, Path, PathBuf},
     time::Instant,
 };
 use typed_num::Num;
 
 pub struct SearchCache {
+    path: PathBuf,
     last_event_id: u64,
     slab_root: usize,
     slab: Slab<SlabNode>,
@@ -29,24 +30,39 @@ pub struct SearchCache {
 }
 
 impl SearchCache {
-    pub fn try_read_persistent_cache() -> Result<Self> {
+    /// The `path` is the root path of the constructed cache and fsevent watch path.
+    pub fn try_read_persistent_cache(path: &Path) -> Result<Self> {
         let last_event_id = current_event_id();
-        read_cache_from_file().map(
-            |PersistentStorage {
-                 slab_root,
-                 slab,
-                 name_index,
-                 ..
-             }| Self::new(last_event_id, slab_root, slab, name_index),
-        )
+        read_cache_from_file()
+            .and_then(|x| {
+                (x.path == path)
+                    .then(|| ())
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Inconsistent root path: expected: {:?}, actual: {:?}",
+                            path,
+                            &x.path
+                        )
+                    })
+                    .map(|()| x)
+            })
+            .map(
+                |PersistentStorage {
+                     path,
+                     slab_root,
+                     slab,
+                     name_index,
+                     ..
+                 }| Self::new(path, last_event_id, slab_root, slab, name_index),
+            )
     }
 
-    pub fn walk_fs() -> Self {
-        fn walkfs_to_slab() -> (usize, Slab<SlabNode>) {
+    pub fn walk_fs(path: PathBuf) -> Self {
+        fn walkfs_to_slab(path: &Path) -> (usize, Slab<SlabNode>) {
             // 先多线程构建树形文件名列表(不能直接创建 slab 因为 slab 无法多线程构建(slab 节点有相互引用，不想加锁))
             let walk_data = WalkData::with_ignore_directory(PathBuf::from("/System/Volumes/Data"));
             let visit_time = Instant::now();
-            let node = walk_it(Path::new("/"), &walk_data).expect("failed to walk");
+            let node = walk_it(path, &walk_data).expect("failed to walk");
             dbg!(walk_data);
             dbg!(visit_time.elapsed());
 
@@ -87,12 +103,13 @@ impl SearchCache {
 
         let last_event_id = current_event_id();
         println!("Walking filesystem...");
-        let (slab_root, slab) = walkfs_to_slab();
+        let (slab_root, slab) = walkfs_to_slab(&path);
         let name_index = name_index(&slab);
-        Self::new(last_event_id, slab_root, slab, name_index)
+        Self::new(path, last_event_id, slab_root, slab, name_index)
     }
 
     pub fn new(
+        path: PathBuf,
         last_event_id: u64,
         slab_root: usize,
         slab: Slab<SlabNode>,
@@ -101,6 +118,7 @@ impl SearchCache {
         // name pool construction speed is fast enough that caching it doesn't worth it.
         let name_pool = name_pool(&name_index);
         Self {
+            path,
             last_event_id,
             slab_root,
             slab,
@@ -182,7 +200,13 @@ impl SearchCache {
             }
         }
         let mut result = String::new();
-        for segment in segments.into_iter().rev() {
+        for segment in self
+            .path
+            .iter()
+            .filter(|&x| x != OsStr::new(MAIN_SEPARATOR_STR))
+            .map(|x| x.to_string_lossy().into_owned())
+            .chain(segments.into_iter().rev())
+        {
             result.push('/');
             result.push_str(&segment);
         }
@@ -222,7 +246,7 @@ impl SearchCache {
         Some(current)
     }
 
-    // create_node_chain just blindly try create node chain, it doesn't check if the path is really exist on disk.
+    // Blindly try create node chain, it doesn't check if the path is really exist on disk.
     fn create_node_chain(&mut self, path: &Path) -> usize {
         let mut current = self.slab_root;
         for name in path
@@ -251,8 +275,13 @@ impl SearchCache {
     }
 
     // `Self::scan_path_recursive`function returns index of the constructed node.
-    // Procedure contains metadata fetching, if fetching failed, None is returned.
+    // - If path is not under the watch root, None is returned.
+    // - Procedure contains metadata fetching, if metadata fetching failed, None is returned.
     pub fn scan_path_recursive(&mut self, path: &Path) -> Option<usize> {
+        // Ensure path is under the watch root
+        let Ok(path) = path.strip_prefix(&self.path) else {
+            return None;
+        };
         if path.metadata().err().map(|e| e.kind()) == Some(ErrorKind::NotFound) {
             self.remove_node_path(path);
             return None;
@@ -270,9 +299,14 @@ impl SearchCache {
     }
 
     // `Self::scan_path_nonrecursive`function returns index of the constructed node.
-    // Procedure contains metadata fetching, if fetching failed, None is returned.
+    // - If path is not under the watch root, None is returned.
+    // - Procedure contains metadata fetching, if metadata fetching failed, None is returned.
     #[allow(dead_code)]
     fn scan_path_nonrecursive(&mut self, path: &Path) -> Option<usize> {
+        // Ensure path is under the watch root
+        let Ok(path) = path.strip_prefix(&self.path) else {
+            return None;
+        };
         if path.metadata().err().map(|e| e.kind()) == Some(ErrorKind::NotFound) {
             self.remove_node_path(path);
             return None;
@@ -315,6 +349,7 @@ impl SearchCache {
     pub fn flush_to_file(self) -> Result<()> {
         write_cache_to_file(PersistentStorage {
             version: Num,
+            path: self.path,
             slab_root: self.slab_root,
             slab: self.slab,
             name_index: self.name_index,
@@ -390,6 +425,9 @@ fn name_pool(name_index: &BTreeMap<String, Vec<usize>>) -> NamePool {
         name_pool.push(name);
     }
     dbg!(name_pool_time.elapsed());
-    println!("name pool size: {}MB", name_pool.len() / 1024 / 1024);
+    println!(
+        "name pool size: {}MB",
+        name_pool.len() as f32 / 1024. / 1024.
+    );
     name_pool
 }

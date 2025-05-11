@@ -58,14 +58,15 @@ fn ctime_mtime_from_metadata(metadata: &Metadata) -> (Option<u64>, Option<u64>) 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let last_event_id = current_event_id();
+    let path = cli.path;
     let mut cache = if cli.refresh {
         println!("Walking filesystem...");
-        SearchCache::walk_fs()
+        SearchCache::walk_fs(path)
     } else {
         println!("Try reading cache...");
-        SearchCache::try_read_persistent_cache().unwrap_or_else(|e| {
+        SearchCache::try_read_persistent_cache(&path).unwrap_or_else(|e| {
             println!("Failed to read cache: {e:?}. Re-walking filesystem...");
-            SearchCache::walk_fs()
+            SearchCache::walk_fs(path)
         })
     };
 
