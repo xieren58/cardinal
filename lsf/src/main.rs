@@ -1,13 +1,11 @@
-mod cache;
 mod cli;
-mod persistent;
 
 use anyhow::{Context, Result};
-use cache::{SearchCache, SearchNode};
 use cardinal_sdk::{EventStream, FSEventStreamEventId, FsEvent};
 use clap::Parser;
 use cli::Cli;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
+use search_cache::{SearchCache, SearchNode};
 use std::io::Write;
 
 fn main() -> Result<()> {

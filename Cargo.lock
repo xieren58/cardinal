@@ -780,18 +780,14 @@ name = "lsf"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bincode",
  "cardinal-sdk",
  "clap",
  "crossbeam-channel",
  "fswalk",
  "namepool",
  "query-segmentation",
+ "search-cache",
  "serde",
- "slab",
- "tempdir",
- "typed-num",
- "zstd",
 ]
 
 [[package]]
@@ -1171,6 +1167,24 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "search-cache"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "cardinal-sdk",
+ "crossbeam-channel",
+ "fswalk",
+ "namepool",
+ "query-segmentation",
+ "serde",
+ "slab",
+ "tempdir",
+ "typed-num",
+ "zstd",
+]
 
 [[package]]
 name = "serde"

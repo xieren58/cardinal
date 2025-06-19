@@ -1,10 +1,10 @@
-use crate::persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file};
-use anyhow::{Context, Result, anyhow, bail};
+use crate::persistent::{read_cache_from_file, write_cache_to_file, PersistentStorage};
+use anyhow::{anyhow, bail, Context, Result};
 use bincode::{Decode, Encode};
-use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
-use fswalk::{Node, NodeMetadata, WalkData, walk_it};
+use cardinal_sdk::{current_event_id, EventFlag, FsEvent, ScanType};
+use fswalk::{walk_it, Node, NodeMetadata, WalkData};
 use namepool::NamePool;
-use query_segmentation::{Segment, query_segmentation};
+use query_segmentation::{query_segmentation, Segment};
 use serde::{Deserialize, Serialize};
 use slab::Slab;
 use std::{
