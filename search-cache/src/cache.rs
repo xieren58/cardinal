@@ -71,7 +71,6 @@ pub struct SearchNode {
 impl SearchCache {
     /// The `path` is the root path of the constructed cache and fsevent watch path.
     pub fn try_read_persistent_cache(path: &Path) -> Result<Self> {
-        let last_event_id = current_event_id();
         read_cache_from_file()
             .and_then(|x| {
                 (x.path == path)
@@ -87,11 +86,12 @@ impl SearchCache {
             })
             .map(
                 |PersistentStorage {
+                     version: _,
                      path,
                      slab_root,
                      slab,
                      name_index,
-                     ..
+                     last_event_id,
                  }| Self::new(path, last_event_id, slab_root, slab, name_index),
             )
     }
@@ -367,7 +367,7 @@ impl SearchCache {
     }
 
     pub fn rescan(&mut self) {
-        // Remove all memory consuming cache
+        // Remove all memory consuming cache early for memory consumption in Self::walk_fs.
         self.slab = Slab::new();
         self.name_index = BTreeMap::default();
         self.name_pool = NamePool::new();
@@ -411,6 +411,7 @@ impl SearchCache {
             slab_root: self.slab_root,
             slab: self.slab,
             name_index: self.name_index,
+            last_event_id: self.last_event_id,
         })
         .context("Write cache to file failed.")
     }

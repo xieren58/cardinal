@@ -17,8 +17,11 @@ const LSF_VERSION: i64 = 1;
 #[derive(Encode, Decode)]
 pub struct PersistentStorage {
     pub version: Num<LSF_VERSION>,
+    /// The last event id of the cache.
+    pub last_event_id: u64,
+    /// Root file path of the cache
     pub path: PathBuf,
-    // root index of the slab
+    /// Root index of the slab
     pub slab_root: usize,
     pub slab: Slab<SlabNode>,
     pub name_index: BTreeMap<String, Vec<usize>>,
