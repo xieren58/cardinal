@@ -36,12 +36,10 @@ function App() {
           placeholder="Search for files and folders..."
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           spellCheck={false}
-          autoComplete="off"
           autoCorrect="off"
+          autoComplete="off"
           autoCapitalize="off"
-          onInput={handleSearch}
         />
-        <button onClick={handleSearch}>Search</button>
       </div>
       <div className="results-container" style={{ flex: 1 }}>
         <AutoSizer>
