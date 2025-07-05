@@ -327,13 +327,7 @@ impl SearchCache {
             self.remove_node_path(path);
             return None;
         };
-        let Some(parent) = path.parent() else {
-            debug!("!!! Full rescan is needed");
-            // If path is watch root, we need to do a full rescan
-            self.rescan();
-            debug!("!!! Full rescan done: {:?}", self.slab_root);
-            return Some(self.slab_root);
-        };
+        let parent = path.parent().expect("scan_path_recursive doesn't expected to scan root(should be filtered outside)");
         // Ensure node of the path parent is existed
         let parent = self.create_node_chain(parent);
         // Remove node(if exists) and do a full rescan
