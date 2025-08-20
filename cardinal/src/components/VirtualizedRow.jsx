@@ -3,6 +3,7 @@ import { formatKB } from '../utils/format';
 
 export function VirtualizedRow({ item, index, style }) {
   const path = typeof item === 'string' ? item : item?.path;
+  const filename = path ? path.split(/[\\/]/).pop() : '';
   const mtimeSec = typeof item !== 'string' ? (item?.metadata?.mtime ?? item?.mtime) : undefined;
   const mtimeText = mtimeSec != null ? new Date(mtimeSec * 1000).toLocaleString() : null;
   const ctimeSec = typeof item !== 'string' ? (item?.metadata?.ctime ?? item?.ctime) : undefined;
@@ -16,6 +17,7 @@ export function VirtualizedRow({ item, index, style }) {
     >
       {item ? (
         <div className="columns row-inner" title={path}>
+          <span className="filename-text">{filename}</span>
           <span className="path-text">{path}</span>
           {mtimeText ? (
             <span className="mtime-text">{mtimeText}</span>

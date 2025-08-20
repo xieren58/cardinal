@@ -3,6 +3,10 @@ import React from 'react';
 export function ColumnHeader({ colWidths, onResizeStart }) {
   return (
     <div className="header-row columns">
+      <span className="filename-text header header-cell">
+        Filename
+        <span className="col-resizer" onMouseDown={onResizeStart('filename')} />
+      </span>
       <span className="path-text header header-cell">
         Path
         <span className="col-resizer" onMouseDown={onResizeStart('path')} />

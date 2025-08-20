@@ -14,7 +14,7 @@ import { ColumnHeader } from "./components/ColumnHeader";
 
 function App() {
   const [results, setResults] = useState([]);
-  const [colWidths, setColWidths] = useState({ path: 600, modified: 180, created: 180, size: 120 });
+  const [colWidths, setColWidths] = useState({ filename: 240, path: 600, modified: 180, created: 180, size: 120 });
   const resizingRef = useRef(null);
   const lruCache = useRef(new LRUCache(1000));
   const infiniteLoaderRef = useRef(null);
@@ -175,6 +175,7 @@ function App() {
       <div
         className="results-container"
         style={{
+          ['--w-filename']: `${colWidths.filename}px`,
           ['--w-path']: `${colWidths.path}px`,
           ['--w-modified']: `${colWidths.modified}px`,
           ['--w-created']: `${colWidths.created}px`,
@@ -196,7 +197,7 @@ function App() {
                   {({ height, width }) => {
                     const colGap = 12;
                     const columnsTotal =
-                      colWidths.path + colWidths.modified + colWidths.created + colWidths.size + (3 * colGap) + 20;
+                      colWidths.filename + colWidths.path + colWidths.modified + colWidths.created + colWidths.size + (4 * colGap) + 20;
                     return (
                       <List
                         ref={el => {
