@@ -3,7 +3,15 @@ use anyhow::{Context, Result};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use search_cache::{HandleFSEError, SearchCache, SearchNode, WalkData};
-use std::{cell::LazyCell, path::PathBuf, sync::{atomic::{AtomicBool, Ordering}, Arc}, time::Duration};
+use std::{
+    cell::LazyCell,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tauri::{Emitter, RunEvent, State};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::EnvFilter;
@@ -17,11 +25,11 @@ struct SearchState {
 }
 
 #[tauri::command]
-async fn search(query: &str, state: State<'_, SearchState>) -> Result<Vec<usize>, String> {
+async fn search(query: String, state: State<'_, SearchState>) -> Result<Vec<usize>, String> {
     // 发送搜索请求到后台线程
     state
         .search_tx
-        .send(query.to_string())
+        .send(query)
         .map_err(|e| format!("Failed to send search request: {:?}", e))?;
 
     // 等待搜索结果
@@ -31,12 +39,14 @@ async fn search(query: &str, state: State<'_, SearchState>) -> Result<Vec<usize>
         .map_err(|e| format!("Failed to receive search result: {:?}", e))?;
 
     // 处理搜索结果
-    search_result
-        .map_err(|e| format!("Failed to process search result: {:?}", e))
+    search_result.map_err(|e| format!("Failed to process search result: {:?}", e))
 }
 
 #[tauri::command]
-async fn get_nodes_info(results: Vec<usize>, state: State<'_, SearchState>) -> Result<Vec<String>, String> {
+async fn get_nodes_info(
+    results: Vec<usize>,
+    state: State<'_, SearchState>,
+) -> Result<Vec<String>, String> {
     state
         .node_info_tx
         .send(results)
@@ -72,7 +82,6 @@ pub fn run() -> Result<()> {
     let (result_tx, result_rx) = unbounded::<Result<Vec<usize>>>();
     let (node_info_tx, node_info_rx) = unbounded::<Vec<usize>>();
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchNode>>();
-
 
     // 运行Tauri应用
     let app = tauri::Builder::default()
@@ -115,7 +124,15 @@ pub fn run() -> Result<()> {
                 while !walking_done_clone.load(Ordering::Relaxed) {
                     let dirs = walk_data_clone.num_dirs.load(Ordering::Relaxed);
                     let files = walk_data_clone.num_files.load(Ordering::Relaxed);
-                    app_handle_clone.emit("status_update", format!("Walking filesystem... {} directories, {} files...", dirs, files)).unwrap();
+                    app_handle_clone
+                        .emit(
+                            "status_update",
+                            format!(
+                                "Walking filesystem... {} directories, {} files...",
+                                dirs, files
+                            ),
+                        )
+                        .unwrap();
                     std::thread::sleep(Duration::from_millis(100));
                 }
             });
