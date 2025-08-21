@@ -98,6 +98,11 @@ impl SearchCache {
             )
     }
 
+    /// Get the total number of files and directories in the cache.
+    pub fn get_total_files(&self) -> usize {
+        self.slab.len()
+    }
+
     pub fn walk_fs(path: PathBuf) -> Self {
         Self::walk_fs_with_walk_data(
             path,
