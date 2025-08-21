@@ -6,18 +6,24 @@ export function useScrollbarSync({ listRef, scrollAreaRef, results, colWidths, s
     function updateVerticalBar() {
       if (!listRef.current || !scrollAreaRef.current) return;
       const grid = listRef.current.Grid || listRef.current;
+      const scroller = grid && grid._scrollingContainer ? grid._scrollingContainer : null;
       const totalRows = results.length;
       const rowHeight = 24;
       const visibleHeight = grid.props.height;
       const totalHeight = totalRows * rowHeight;
-      const scrollTop = grid.state ? grid.state.scrollTop : 0;
+      // Prefer reading the live scrollTop from the actual scrolling element to avoid lag
+      const scrollTop = scroller ? scroller.scrollTop : (grid.state ? grid.state.scrollTop : 0);
       if (totalHeight <= visibleHeight) {
         setVerticalBar({ top: 0, height: 0, visible: false });
         return;
       }
-      const barHeight = Math.max(32, visibleHeight * visibleHeight / totalHeight);
-      const barTop = (scrollTop / totalHeight) * visibleHeight;
-      console.log('debug', { totalHeight, visibleHeight, scrollTop, barHeight, colWidths, barTop  });
+      // VS Code-like mapping: map content scroll [0, totalHeight - visibleHeight]
+      // to track range [0, visibleHeight - barHeight]
+      const barHeight = Math.max(32, (visibleHeight * visibleHeight) / totalHeight);
+      const maxContentScroll = Math.max(1, totalHeight - visibleHeight);
+      const maxTrack = Math.max(0, visibleHeight - barHeight);
+      const ratio = scrollTop / maxContentScroll;
+      const barTop = Math.max(0, Math.min(maxTrack, ratio * maxTrack));
       setVerticalBar({ top: barTop, height: barHeight, visible: true });
     }
     function updateHorizontalBar() {
@@ -30,8 +36,12 @@ export function useScrollbarSync({ listRef, scrollAreaRef, results, colWidths, s
         setHorizontalBar({ left: 0, width: 0, visible: false });
         return;
       }
-      const barWidth = Math.max(32, clientWidth * clientWidth / scrollWidth);
-      const barLeft = (scrollLeft / scrollWidth) * clientWidth;
+      // VS Code-like mapping: content [0, scrollWidth - clientWidth] -> track [0, clientWidth - barWidth]
+      const barWidth = Math.max(32, (clientWidth * clientWidth) / scrollWidth);
+      const maxContentScrollX = Math.max(1, scrollWidth - clientWidth);
+      const maxTrackX = Math.max(0, clientWidth - barWidth);
+      const ratioX = scrollLeft / maxContentScrollX;
+      const barLeft = Math.max(0, Math.min(maxTrackX, ratioX * maxTrackX));
       setHorizontalBar({ left: barLeft, width: barWidth, visible: true });
     }
     updateVerticalBar();
@@ -43,11 +53,15 @@ export function useScrollbarSync({ listRef, scrollAreaRef, results, colWidths, s
     const el = scrollAreaRef.current;
     const onHScroll = () => updateHorizontalBar();
     el && el.addEventListener('scroll', onHScroll);
-    window.addEventListener('resize', updateHorizontalBar);
+    const onResize = () => {
+      updateVerticalBar();
+      updateHorizontalBar();
+    };
+    window.addEventListener('resize', onResize);
     return () => {
       grid && grid._scrollingContainer && grid._scrollingContainer.removeEventListener('scroll', onVScroll);
       el && el.removeEventListener('scroll', onHScroll);
-      window.removeEventListener('resize', updateHorizontalBar);
+      window.removeEventListener('resize', onResize);
     };
   }, [results, colWidths, listRef, scrollAreaRef, setVerticalBar, setHorizontalBar]);
 }

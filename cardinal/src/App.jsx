@@ -60,10 +60,16 @@ function App() {
     const el = scrollAreaRef.current;
     const clientWidth = el?.clientWidth || 1;
     const scrollWidth = el?.scrollWidth || 1;
+    const barWidth = horizontalBar.width || 0;
     function onMove(ev) {
       const deltaX = ev.clientX - startX;
-      let newLeft = Math.max(0, Math.min(clientWidth - horizontalBar.width, startLeft + deltaX));
-      const scrollLeft = (newLeft / clientWidth) * scrollWidth;
+      // Clamp thumb within track (track length = clientWidth - barWidth)
+      const maxTrackX = Math.max(0, clientWidth - barWidth);
+      let newLeft = Math.max(0, Math.min(maxTrackX, startLeft + deltaX));
+      // Map thumb position to content scroll range (scrollWidth - clientWidth)
+      const maxContentScrollX = Math.max(0, scrollWidth - clientWidth);
+      const ratioX = maxTrackX > 0 ? (newLeft / maxTrackX) : 0;
+      const scrollLeft = Math.max(0, Math.min(maxContentScrollX, ratioX * maxContentScrollX));
       if (el) el.scrollLeft = scrollLeft;
     }
     function onUp() {
@@ -87,8 +93,14 @@ function App() {
     const totalHeight = totalRows * rowHeight;
     function onMove(ev) {
       const deltaY = ev.clientY - startY;
-      let newTop = Math.max(0, Math.min(visibleHeight - verticalBar.height, startTop + deltaY));
-      const scrollTop = (newTop / visibleHeight) * totalHeight;
+      // Clamp thumb within track (track length = visibleHeight - barHeight)
+      const barHeight = verticalBar.height || 0;
+      const maxTrackY = Math.max(0, visibleHeight - barHeight);
+      let newTop = Math.max(0, Math.min(maxTrackY, startTop + deltaY));
+      // Map thumb position to content scroll range (totalHeight - visibleHeight)
+      const maxContentScrollY = Math.max(0, totalHeight - visibleHeight);
+      const ratioY = maxTrackY > 0 ? (newTop / maxTrackY) : 0;
+      const scrollTop = Math.max(0, Math.min(maxContentScrollY, ratioY * maxContentScrollY));
       if (grid && grid._scrollingContainer) {
         grid._scrollingContainer.scrollTop = scrollTop;
       }
