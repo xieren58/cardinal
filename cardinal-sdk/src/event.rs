@@ -1,8 +1,8 @@
-use crate::{EventFlag, FSEventStreamEventId};
+use crate::{EventFlag, FSEventStreamEventId, ScanType};
 use std::{
     ffi::{CStr, OsStr},
     os::unix::ffi::OsStrExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[derive(Debug)]
@@ -22,5 +22,13 @@ impl FsEvent {
         let path = PathBuf::from(path);
         let flag = EventFlag::from_bits_truncate(flag);
         FsEvent { path, flag, id }
+    }
+
+    pub fn should_rescan(&self, root: &Path) -> bool {
+        match self.flag.scan_type() {
+            ScanType::ReScan => true,
+            ScanType::SingleNode | ScanType::Folder if self.path == root => true,
+            ScanType::SingleNode | ScanType::Folder | ScanType::Nop => false,
+        }
     }
 }

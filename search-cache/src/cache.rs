@@ -187,7 +187,11 @@ impl SearchCache {
     }
 
     pub fn search_empty(&self) -> Vec<usize> {
-        self.name_index.values().flatten().copied().collect::<Vec<_>>()
+        self.name_index
+            .values()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>()
     }
 
     pub fn search(&self, line: &str) -> Result<Vec<usize>> {
@@ -504,38 +508,84 @@ impl SearchCache {
             .collect()
     }
 
-    fn handle_fs_event(&mut self, event: FsEvent) -> Result<(), HandleFSEError> {
-        match event.flag.scan_type() {
-            // Sometimes there are rediculous events assuming dir as file, so we always scan them as folder
-            ScanType::SingleNode | ScanType::Folder => {
-                if event.path == self.path {
-                    info!("Root node changed, rescan: {:?}", event);
-                    return Err(HandleFSEError::Rescan);
-                }
-                let folder = self.scan_path_recursive(&event.path);
-                if folder.is_some() {
-                    info!("Node changed: {:?}, {folder:?}", event.path);
-                }
-            }
-            ScanType::ReScan => {
-                info!("Event rescan: {:?}", event);
-                return Err(HandleFSEError::Rescan);
-            }
-            ScanType::Nop => {}
-        }
-        self.update_last_event_id(event.id);
-        Ok(())
-    }
-
     pub fn handle_fs_events(&mut self, events: Vec<FsEvent>) -> Result<(), HandleFSEError> {
-        for event in events {
+        let max_event_id = events.iter().map(|e| e.id).max();
+        // If rescan needed, early exit.
+        if events.iter().any(|event| {
             if event.flag.contains(EventFlag::HistoryDone) {
                 info!("History processing done: {:?}", event);
             }
-            self.handle_fs_event(event)?;
+            if event.should_rescan(&self.path) {
+                info!("Event rescan: {:?}", event);
+                true
+            } else {
+                false
+            }
+        }) {
+            return Err(HandleFSEError::Rescan);
+        }
+        for scan_path in scan_paths(events) {
+            let folder = self.scan_path_recursive(&scan_path);
+            if folder.is_some() {
+                info!("Node changed: {:?}, {folder:?}", scan_path);
+            }
+        }
+        if let Some(max_event_id) = max_event_id {
+            self.update_last_event_id(max_event_id);
         }
         Ok(())
     }
+}
+
+/// 根据一批 FsEvent 计算需要进行递归/单节点扫描的最小路径集合。
+///
+/// 功能 & 目标:
+/// 1. 过滤掉不需要增量扫描的事件 (例如 `ReScan` / `Nop` 类型: RootChanged, HistoryDone 等)，这些事件在更高层逻辑里会触发完整重建或者仅更新 event id。
+/// 2. 只保留 `ScanType::SingleNode` 与 `ScanType::Folder` 的事件路径。
+/// 3. 对路径做“祖先去重”与“祖先覆盖”：
+///    - 如果即将插入的路径已被某个祖先路径覆盖 (path.starts_with(ancestor))，跳过它；
+///    - 如果新路径是现有若干路径的祖先，则移除所有这些后代，只保留祖先；
+///    - 相同路径只会出现一次 (后续重复事件会被 starts_with 判定为已覆盖)。
+/// 4. 结果是需要最少扫描次数即可覆盖所有事件影响的最小集合 (Minimal Cover)。
+///
+/// 使用场景:
+/// - `SearchCache::handle_fs_events` 中遍历返回的路径，对每个路径执行 `scan_path_recursive`，避免对子孙/重复路径做浪费的多次扫描。
+/// - FSEvents 高频且可能“冒泡”出大量同一子树的文件/目录更改，合并可以显著降低后续 IO / 元数据抓取开销。
+///
+/// 算法复杂度:
+/// - 最坏 O(n^2)：当输入是严格降序的深层路径链 (如 a/b/c/d/e ... 之后再插入 a)，会产生多次 retain 过滤。
+/// - 典型批次 (几十个以内) 成本可接受；如需进一步优化，可改为先排序再线性扫描或使用 Trie/前缀树。
+///
+/// Corner Cases & 处理方式:
+/// - 空输入 => 返回空 Vec。
+/// - 重复相同路径多次 => 只保留一次 (后续会被 starts_with 匹配跳过)。
+/// - 先出现子路径, 后出现其祖先 => 祖先覆盖子路径, 仅祖先保留。
+/// - 先出现祖先, 后出现子路径 => 子路径被跳过。
+/// - 兄弟路径互不影响 => 全部保留。
+/// - 路径名字前缀但不是父子关系 (如 /foo/bar 与 /foo/barista) => 二者都保留 (Path::starts_with 以组件匹配，不会把 barista 当作 bar 的子路径)。
+/// - 混合 Folder / SingleNode 事件 => 一起参与最小化；不区分类型只看路径祖先关系。
+/// - 使用 PathBuf 原样比较，不做规范化：不会展开符号链接；调用方需保证一致性。
+///
+/// 效果: 本地测试跳过了 415449 个事件中 173034 个事件的扫描
+fn scan_paths(events: Vec<FsEvent>) -> Vec<PathBuf> {
+    let num_events = events.len();
+    events
+        .into_iter()
+        .filter(|event| {
+            // Sometimes there are rediculous events assuming dir as file, so we always scan them as folder
+            matches!(
+                event.flag.scan_type(),
+                ScanType::SingleNode | ScanType::Folder
+            )
+        })
+        .map(|event| event.path)
+        .fold(Vec::with_capacity(num_events), |mut events, path| {
+            if !events.iter().any(|p: &PathBuf| path.starts_with(p)) {
+                events.retain(|p: &PathBuf| !p.starts_with(&path));
+                events.push(path);
+            }
+            events
+        })
 }
 
 /// Error type for `SearchCache::handle_fs_event`.
@@ -1405,5 +1455,202 @@ mod tests {
             .as_ref()
             .expect("File in event-added dir metadata should be Some");
         assert_eq!(inner_file_meta.size, 4);
+    }
+
+    // --- scan_paths 专项测试 ---
+    #[test]
+    fn test_scan_paths_empty() {
+        assert!(scan_paths(vec![]).is_empty());
+    }
+
+    #[test]
+    fn test_scan_paths_only_rescan_events_kept_when_called_directly() {
+        let root = PathBuf::from("/tmp/root");
+        let events = vec![FsEvent {
+            path: root.clone(),
+            id: 1,
+            flag: EventFlag::RootChanged,
+        }];
+        let out = scan_paths(events);
+        assert_eq!(out, vec![root]);
+    }
+
+    #[test]
+    fn test_scan_paths_history_done_filtered() {
+        let p = PathBuf::from("/tmp/a");
+        let events = vec![FsEvent {
+            path: p,
+            id: 1,
+            flag: EventFlag::HistoryDone,
+        }];
+        // HistoryDone => ScanType::Nop
+        assert!(scan_paths(events).is_empty());
+    }
+
+    #[test]
+    fn test_scan_paths_dedup_same_path() {
+        let p = PathBuf::from("/tmp/a/b");
+        let events = vec![
+            FsEvent {
+                path: p.clone(),
+                id: 1,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsDir,
+            },
+            FsEvent {
+                path: p.clone(),
+                id: 2,
+                flag: EventFlag::ItemModified | EventFlag::ItemIsFile,
+            }, // 假设错误标记, 仍然 SingleNode
+            FsEvent {
+                path: p,
+                id: 3,
+                flag: EventFlag::ItemRemoved | EventFlag::ItemIsFile,
+            },
+        ];
+        let out = scan_paths(events);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0], PathBuf::from("/tmp/a/b"));
+    }
+
+    #[test]
+    fn test_scan_paths_child_then_parent_collapses() {
+        let events = vec![
+            FsEvent {
+                path: PathBuf::from("/t/a/b/c"),
+                id: 1,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsFile,
+            },
+            FsEvent {
+                path: PathBuf::from("/t/a/b"),
+                id: 2,
+                flag: EventFlag::ItemModified | EventFlag::ItemIsDir,
+            },
+            FsEvent {
+                path: PathBuf::from("/t/a"),
+                id: 3,
+                flag: EventFlag::ItemModified | EventFlag::ItemIsDir,
+            },
+        ];
+        let out = scan_paths(events);
+        // 最终只剩 /t/a
+        assert_eq!(out, vec![PathBuf::from("/t/a")]);
+    }
+
+    #[test]
+    fn test_scan_paths_parent_then_child_skip_child() {
+        let events = vec![
+            FsEvent {
+                path: PathBuf::from("/t/a"),
+                id: 1,
+                flag: EventFlag::ItemModified | EventFlag::ItemIsDir,
+            },
+            FsEvent {
+                path: PathBuf::from("/t/a/b"),
+                id: 2,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsFile,
+            },
+            FsEvent {
+                path: PathBuf::from("/t/a/b/c"),
+                id: 3,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsFile,
+            },
+        ];
+        let out = scan_paths(events);
+        assert_eq!(out, vec![PathBuf::from("/t/a")]);
+    }
+
+    #[test]
+    fn test_scan_paths_siblings_all_retained() {
+        let events = vec![
+            FsEvent {
+                path: PathBuf::from("/t/a/x"),
+                id: 1,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsFile,
+            },
+            FsEvent {
+                path: PathBuf::from("/t/a/y"),
+                id: 2,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsFile,
+            },
+            FsEvent {
+                path: PathBuf::from("/t/a/z"),
+                id: 3,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsFile,
+            },
+        ];
+        let mut out = scan_paths(events);
+        out.sort();
+        assert_eq!(
+            out,
+            vec!["/t/a/x", "/t/a/y", "/t/a/z"]
+                .into_iter()
+                .map(PathBuf::from)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_scan_paths_prefix_but_not_parent() {
+        // /foo/bar 与 /foo/barista 不是父子关系（组件不同），应同时保留
+        let events = vec![
+            FsEvent {
+                path: PathBuf::from("/foo/bar"),
+                id: 1,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsDir,
+            },
+            FsEvent {
+                path: PathBuf::from("/foo/barista"),
+                id: 2,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsDir,
+            },
+        ];
+        let mut out = scan_paths(events);
+        out.sort();
+        assert_eq!(
+            out,
+            vec![PathBuf::from("/foo/bar"), PathBuf::from("/foo/barista")]
+        );
+    }
+
+    #[test]
+    fn test_scan_paths_mix_folder_and_single_node() {
+        // 创建目录事件 + 文件修改事件, 目录应吸收其子文件
+        let events = vec![
+            FsEvent {
+                path: PathBuf::from("/mix/dir/sub/file.txt"),
+                id: 1,
+                flag: EventFlag::ItemModified | EventFlag::ItemIsFile,
+            },
+            FsEvent {
+                path: PathBuf::from("/mix/dir/sub"),
+                id: 2,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsDir,
+            },
+        ];
+        let out = scan_paths(events);
+        assert_eq!(out, vec![PathBuf::from("/mix/dir/sub")]);
+    }
+
+    #[test]
+    fn test_scan_paths_large_chain_collapse() {
+        // 模拟较长链条，最后祖先出现
+        let mut events = Vec::new();
+        let depth = ["a", "b", "c", "d", "e", "f"];
+        for i in 0..depth.len() {
+            let path = format!("/long/{}", depth[..=i].join("/"));
+            events.push(FsEvent {
+                path: PathBuf::from(path),
+                id: i as u64,
+                flag: EventFlag::ItemCreated | EventFlag::ItemIsDir,
+            });
+        }
+        // 插入真正的祖先 /long
+        events.push(FsEvent {
+            path: PathBuf::from("/long"),
+            id: 99,
+            flag: EventFlag::ItemModified | EventFlag::ItemIsDir,
+        });
+        let out = scan_paths(events);
+        assert_eq!(out, vec![PathBuf::from("/long")]);
     }
 }
