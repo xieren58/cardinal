@@ -152,57 +152,69 @@ pub fn run() -> Result<()> {
             LazyCell::new(move || app_handle_clone.emit("init_completed", ()).unwrap())
         };
         // 初始化搜索缓存
-        let mut cache = if let Ok(cached) =
-            SearchCache::try_read_persistent_cache(&path, &CACHE_PATH)
-        {
-            info!("Loaded existing cache");
-            // If using cache, defer the emit init process to HistoryDone event processing
-            
-            // 发送初始状态栏信息
-            app_handle.emit("status_bar_update", StatusBarUpdate {
-                scanned_files: cached.get_total_files(),
-                processed_events
-            }).unwrap();
-            
-            cached
-        } else {
-            info!("Walking filesystem...");
-            let walk_data = Arc::new(WalkData::new(PathBuf::from("/System/Volumes/Data"), false));
-            let walk_data_clone = walk_data.clone();
-            let app_handle_clone = app_handle.clone();
-            let walking_done = Arc::new(AtomicBool::new(false));
-            let walking_done_clone = walking_done.clone();
+        let mut cache = match SearchCache::try_read_persistent_cache(&path, &CACHE_PATH) {
+            Ok(cached) => {
+                info!("Loaded existing cache");
+                // If using cache, defer the emit init process to HistoryDone event processing
 
-            std::thread::spawn(move || {
-                while !walking_done_clone.load(Ordering::Relaxed) {
-                    let dirs = walk_data_clone.num_dirs.load(Ordering::Relaxed);
-                    let files = walk_data_clone.num_files.load(Ordering::Relaxed);
-                    let total = dirs + files;
-                    app_handle_clone
-                        .emit(
-                            "status_bar_update",
-                            StatusBarUpdate {
-                                scanned_files: total,
-                                processed_events: 0
-                            },
-                        )
-                        .unwrap();
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-            });
+                // 发送初始状态栏信息
+                app_handle
+                    .emit(
+                        "status_bar_update",
+                        StatusBarUpdate {
+                            scanned_files: cached.get_total_files(),
+                            processed_events,
+                        },
+                    )
+                    .unwrap();
 
-            let cache = SearchCache::walk_fs_with_walk_data(path.clone(), &walk_data);
-            walking_done.store(true, Ordering::Relaxed);
-            
-            // 发送初始状态栏信息
-            app_handle.emit("status_bar_update", StatusBarUpdate {
-                scanned_files: cache.get_total_files(),
-                processed_events
-            }).unwrap();
-            
-            // If full file system scan, emit initialized instantly.
-            *emit_init;
-            cache
+                cached
+            }
+            Err(e) => {
+                info!("Walking filesystem: {:?}", e);
+                let walk_data =
+                    Arc::new(WalkData::new(PathBuf::from("/System/Volumes/Data"), false));
+                let walk_data_clone = walk_data.clone();
+                let app_handle_clone = app_handle.clone();
+                let walking_done = Arc::new(AtomicBool::new(false));
+                let walking_done_clone = walking_done.clone();
+
+                std::thread::spawn(move || {
+                    while !walking_done_clone.load(Ordering::Relaxed) {
+                        let dirs = walk_data_clone.num_dirs.load(Ordering::Relaxed);
+                        let files = walk_data_clone.num_files.load(Ordering::Relaxed);
+                        let total = dirs + files;
+                        app_handle_clone
+                            .emit(
+                                "status_bar_update",
+                                StatusBarUpdate {
+                                    scanned_files: total,
+                                    processed_events: 0,
+                                },
+                            )
+                            .unwrap();
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                });
+
+                let cache = SearchCache::walk_fs_with_walk_data(path.clone(), &walk_data);
+                walking_done.store(true, Ordering::Relaxed);
+
+                // 发送初始状态栏信息
+                app_handle
+                    .emit(
+                        "status_bar_update",
+                        StatusBarUpdate {
+                            scanned_files: cache.get_total_files(),
+                            processed_events,
+                        },
+                    )
+                    .unwrap();
+
+                // If full file system scan, emit initialized instantly.
+                *emit_init;
+                cache
+            }
         };
 
         // 启动事件监听器
@@ -236,13 +248,13 @@ pub fn run() -> Result<()> {
                 recv(event_watcher.receiver) -> events => {
                     let events = events.expect("Event stream closed");
                     processed_events += events.len();
-                    
+
                     // 发送状态栏更新事件，包含文件扫描数和处理的事件数
                     app_handle.emit("status_bar_update", StatusBarUpdate {
                         scanned_files: cache.get_total_files(),
                         processed_events
                     }).unwrap();
-                    
+
                     // Emit HistoryDone inform frontend that cache is ready.
                     if events.iter().any(|x| x.flag == EventFlag::HistoryDone) {
                         *emit_init;
