@@ -321,6 +321,6 @@ fn flush_cache_to_file_once(finish_tx: &Sender<Sender<SearchCache>>) {
             .context("Failed to write cache to file")
             .unwrap();
 
-        info!("Cache flushed successfully to {:?}", CACHE_PATH);
+        info!("Cache flushed successfully to {:?}", &*CACHE_PATH);
     });
 }
