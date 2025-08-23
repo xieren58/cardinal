@@ -23,7 +23,35 @@ pub struct SlabNode {
     parent: Option<usize>,
     children: Vec<usize>,
     name: String,
-    metadata: Option<NodeMetadata>,
+    metadata: SlabNodeMetadata,
+}
+
+#[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone, Copy)]
+pub enum SlabNodeMetadata {
+    Unaccessible,
+    Some(NodeMetadata),
+    None,
+}
+
+impl SlabNodeMetadata {
+    pub fn as_ref(&self) -> Option<&NodeMetadata> {
+        match self {
+            Self::Some(metadata) => Some(metadata),
+            Self::Unaccessible | Self::None => None,
+        }
+    }
+
+    pub fn is_some(&self) -> bool {
+        matches!(self, Self::Some(_))
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    pub fn is_unaccessible(&self) -> bool {
+        matches!(self, Self::Unaccessible)
+    }
 }
 
 #[derive(Debug)]
@@ -93,6 +121,7 @@ impl SearchCache {
         )
     }
 
+    /// This function is expected to be called with WalkData which metadata is not fetched.
     pub fn walk_fs_with_walk_data(path: PathBuf, walk_data: &WalkData) -> Self {
         fn walkfs_to_slab(path: &Path, walk_data: &WalkData) -> (usize, Slab<SlabNode>) {
             // 先多线程构建树形文件名列表(不能直接创建 slab 因为 slab 无法多线程构建(slab 节点有相互引用，不想加锁))
@@ -310,7 +339,7 @@ impl SearchCache {
                     parent: Some(current),
                     children: vec![],
                     name,
-                    metadata: None,
+                    metadata: SlabNodeMetadata::None,
                 };
                 let index = self.push_node(node);
                 self.slab[current].children.push(index);
@@ -450,7 +479,7 @@ impl SearchCache {
     }
 
     /// Returns a node info vector with the same length as the input nodes.
-    /// If the given node is not found, an empty SearchNode is returned.
+    /// If the given node is not found, an empty SearchResultNode is returned.
     pub fn expand_file_nodes(&mut self, nodes: Vec<usize>) -> Vec<SearchResultNode> {
         self.expand_file_nodes_inner::<true>(nodes)
     }
@@ -464,20 +493,23 @@ impl SearchCache {
             .map(|node| {
                 let path = self.node_path(node);
                 let metadata = self.slab.get_mut(node).and_then(|node| {
-                    if let Some(metadata) = &node.metadata {
-                        Some(metadata.clone())
-                    } else {
-                        if !FETCH_META {
-                            None
-                        } else if let Some(path) = &path {
-                            // try fetching metadata if it's not cached and cache them
-                            let metadata = std::fs::metadata(path)
-                                .ok()
-                                .map(NodeMetadata::from);
-                            node.metadata = metadata;
-                            metadata
-                        } else {
-                            None
+                    match node.metadata {
+                        SlabNodeMetadata::Unaccessible => None,
+                        SlabNodeMetadata::Some(metadata) => Some(metadata),
+                        SlabNodeMetadata::None => {
+                            if !FETCH_META {
+                                None
+                            } else if let Some(path) = &path {
+                                // try fetching metadata if it's not cached and cache them
+                                let metadata = std::fs::metadata(path).map(NodeMetadata::from);
+                                node.metadata = match metadata {
+                                    Ok(metadata) => SlabNodeMetadata::Some(metadata),
+                                    Err(_) => SlabNodeMetadata::Unaccessible,
+                                };
+                                metadata.ok()
+                            } else {
+                                None
+                            }
                         }
                     }
                 });
@@ -576,12 +608,17 @@ pub enum HandleFSEError {
     Rescan,
 }
 
+/// Note: This function is expected to be called with WalkData which metadata is not fetched.
 fn construct_node_slab(parent: Option<usize>, node: &Node, slab: &mut Slab<SlabNode>) -> usize {
     let slab_node = SlabNode {
         parent,
         children: vec![],
         name: node.name.clone(),
-        metadata: node.metadata.clone(),
+        // This function is expected to be called with WalkData which metadata is not fetched.
+        metadata: match node.metadata {
+            Some(metadata) => SlabNodeMetadata::Some(metadata),
+            None => SlabNodeMetadata::None,
+        },
     };
     let index = slab.insert(slab_node);
     slab[index].children = node
@@ -592,7 +629,10 @@ fn construct_node_slab(parent: Option<usize>, node: &Node, slab: &mut Slab<SlabN
     index
 }
 
-/// ATTENTION: This function doesn't remove existing node.
+/// ATTENTION: This function doesn't remove existing node, you should remove it
+/// before creating the new subtree, or the old subtree nodes will be dangling.
+///
+/// ATTENTION1: This function should only called with Node fetched with metadata.
 fn create_node_slab_update_name_index_and_name_pool(
     parent: Option<usize>,
     node: &Node,
@@ -604,7 +644,11 @@ fn create_node_slab_update_name_index_and_name_pool(
         parent,
         children: vec![],
         name: node.name.clone(),
-        metadata: node.metadata.clone(),
+        metadata: match node.metadata {
+            Some(metadata) => SlabNodeMetadata::Some(metadata),
+            // This function should only be called with Node fetched with metadata
+            None => SlabNodeMetadata::Unaccessible,
+        },
     };
     let index = slab.insert(slab_node);
     if let Some(indexes) = name_index.get_mut(&node.name) {
