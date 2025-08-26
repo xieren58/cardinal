@@ -121,13 +121,12 @@ export const VirtualList = forwardRef(function VirtualList({
 		<div
 			ref={scrollRef}
 			className={className}
-			style={{ position: 'relative', overflow: 'auto', width: '100%', height: '100%' }}
 			onScroll={handleScroll}
 			role="list"
 			aria-rowcount={rowCount}
 		>
 			<div style={{ height: totalHeight, position: 'relative' }}>
-				<div style={{ position: 'absolute', top: start * rowHeight, left: 0, right: 0 }}>
+				<div className="virtual-list-items" style={{ top: start * rowHeight }}>
 					{items}
 				</div>
 			</div>

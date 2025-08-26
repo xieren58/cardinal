@@ -4,7 +4,7 @@
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "San Francisco", "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 24px;
   font-weight: 400;
 
@@ -54,7 +54,7 @@
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
-  /* 禁止文本光标 */
+  /* 禁止文本光标（交互元素单独覆盖） */
   cursor: default;
   overscroll-behavior: none;
   /* 禁用 Safari WebView 的橡皮筋滚动效果 */
@@ -88,7 +88,6 @@ main,
   grid-template-columns: 100%;
   text-align: center;
   height: 100vh;
-  box-sizing: border-box;
   gap: 0.25rem;
 }
 
@@ -267,6 +266,8 @@ button:active {
   flex: 1;
   overflow-y: auto;   /* 允许垂直滚动 */
   overflow-x: auto;   /* 允许水平滚动，并显示滚动条 */
+  position: relative; /* 允许内部绝对定位 */
+  width: 100%;
 }
 
 /* 隐藏垂直滚动条，但保留水平滚动条 */
@@ -438,15 +439,6 @@ button:active {
   }
 }
 
-@keyframes searchPulse {
-  0%, 100% {
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 /* Search placeholder styles */
 .search-placeholder {
   display: flex;
@@ -478,38 +470,6 @@ button:active {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-
-/* === Initializing Overlay === */
-.initializing-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: -1; /* 让水平滚动条能覆盖 spinner */
-}
-
-.spinner {
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border-left-color: #09f;
-  margin-right: 8px;
-  z-index: -1; /* 让水平滚动条能覆盖 spinner */
-
-  animation: spin 1s ease infinite;
-}
-
-/* === Animations === */
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 /* === Dark Mode === */
@@ -598,3 +558,9 @@ button:active {
   line-height: 24px;
 }
 .context-menu li:hover { background-color: var(--color-accent); color: #fff; }
+
+/* === Utilities (extracted from inline JSX styles) === */
+.flex-fill { flex: 1; min-height: 0; }
+
+/* Virtual list internal positioning */
+.virtual-list-items { position: absolute; left: 0; right: 0; }

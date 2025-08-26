@@ -98,7 +98,7 @@ function App() {
             onResizeStart={onResizeStart}
             onContextMenu={showHeaderContextMenu}
           />
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div className="flex-fill">
             {/* 当搜索中且显示loading UI时，显示搜索占位符 */}
       {showLoadingUI || !initialFetchCompleted ? (
               <div className="search-placeholder">
