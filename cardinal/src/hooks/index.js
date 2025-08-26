@@ -34,8 +34,11 @@ export function useSearch(setResults) {
   const [hasInitialSearchRun, setHasInitialSearchRun] = useState(false);
   const [showLoadingUI, setShowLoadingUI] = useState(false);
   const [initialFetchCompleted, setInitialFetchCompleted] = useState(false);
+  const [durationMs, setDurationMs] = useState(null);
+  const [resultCount, setResultCount] = useState(0);
 
   const handleSearch = useCallback(async (query) => {
+    const startTs = performance.now();
     const isInitial = !hasInitialSearchRun;
     // 初始搜索立即进入 loading；后续搜索使用延迟避免闪烁
     if (isInitial) {
@@ -46,24 +49,34 @@ export function useSearch(setResults) {
         setShowLoadingUI(true);
       }, 150);
     }
-    
+
     try {
       const searchResults = await invoke("search", { query });
-      
+
       // 清除延迟timer
       if (loadingDelayTimerRef.current) {
         clearTimeout(loadingDelayTimerRef.current);
         loadingDelayTimerRef.current = null;
       }
-      
+
       setResults(searchResults);
       setCurrentQuery(query.trim());
-    setShowLoadingUI(false);
-    if (!initialFetchCompleted) setInitialFetchCompleted(true);
+      setShowLoadingUI(false);
+      if (!initialFetchCompleted) setInitialFetchCompleted(true);
+
+      const endTs = performance.now();
+      const dur = endTs - startTs;
+      setDurationMs(dur);
+      setResultCount(Array.isArray(searchResults) ? searchResults.length : 0);
     } catch (error) {
       console.error('Search failed:', error);
       setShowLoadingUI(false);
-    if (!initialFetchCompleted) setInitialFetchCompleted(true); // 即使失败也结束初始加载状态
+      if (!initialFetchCompleted) setInitialFetchCompleted(true); // 即使失败也结束初始加载状态
+
+      const endTs = performance.now();
+      const dur = endTs - startTs;
+      setDurationMs(dur);
+      setResultCount(0);
     }
   }, [setResults, hasInitialSearchRun, initialFetchCompleted]);
 
@@ -78,7 +91,7 @@ export function useSearch(setResults) {
   const onQueryChange = useCallback((e) => {
     const inputValue = e.target.value;
     clearTimeout(debounceTimerRef.current);
-    
+
     debounceTimerRef.current = setTimeout(() => {
       handleSearch(inputValue);
     }, SEARCH_DEBOUNCE_MS);
@@ -96,7 +109,7 @@ export function useSearch(setResults) {
     };
   }, []);
 
-  return { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted };
+  return { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted, durationMs, resultCount };
 }
 
 export { useRowData } from './useRowData';

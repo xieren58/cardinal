@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { ContextMenu } from './components/ContextMenu';
 import { ColumnHeader } from './components/ColumnHeader';
@@ -14,12 +14,12 @@ function App() {
   const { results, setResults, isInitialized, scannedFiles, processedEvents } = useAppState();
   const { colWidths, onResizeStart, autoFitColumns } = useColumnResize();
   const { getItem, ensureRangeLoaded } = useRowData(results);
-  const { 
+  const {
     contextMenu, showContextMenu, closeContextMenu, menuItems,
-    headerContextMenu, showHeaderContextMenu, closeHeaderContextMenu, headerMenuItems 
+    headerContextMenu, showHeaderContextMenu, closeHeaderContextMenu, headerMenuItems
   } = useContextMenu(autoFitColumns);
-  const { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted } = useSearch(setResults);
-  
+  const { onQueryChange, currentQuery, showLoadingUI, initialFetchCompleted, durationMs, resultCount } = useSearch(setResults);
+
   const headerRef = useRef(null);
   const scrollAreaRef = useRef(null);
   const virtualListRef = useRef(null);
@@ -100,7 +100,7 @@ function App() {
           />
           <div className="flex-fill">
             {/* 当搜索中且显示loading UI时，显示搜索占位符 */}
-      {showLoadingUI || !initialFetchCompleted ? (
+            {showLoadingUI || !initialFetchCompleted ? (
               <div className="search-placeholder">
                 <div className="search-placeholder-content">
                   <div className="search-spinner"></div>
@@ -139,10 +139,12 @@ function App() {
           onClose={closeHeaderContextMenu}
         />
       )}
-      <StatusBar 
-        scannedFiles={scannedFiles} 
-        processedEvents={processedEvents} 
+      <StatusBar
+        scannedFiles={scannedFiles}
+        processedEvents={processedEvents}
         isReady={isInitialized}
+        searchDurationMs={durationMs}
+        resultCount={resultCount}
       />
     </main>
   );
