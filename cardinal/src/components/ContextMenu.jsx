@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import './ContextMenu.css';
 
 export function ContextMenu({ x, y, items, onClose }) {
   const menuRef = useRef(null);

@@ -1,5 +1,4 @@
 import React from 'react';
-import './StatusBar.css';
 
 const StatusBar = ({ scannedFiles, processedEvents, isReady }) => {
   return (

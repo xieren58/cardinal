@@ -544,3 +544,57 @@ button:active {
     background-color: #343a40;
   }
 }
+
+/* === Merged: StatusBar.css === */
+.status-bar {
+  height: 24px;
+  background: var(--color-elevated-bg);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.status-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.readiness-indicator {
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.readiness-indicator.ready { color: #4CAF50; }
+.readiness-indicator.not-ready { color: #FF9800; }
+
+.status-label { color: var(--color-muted); font-weight: 500; }
+.status-value { color: var(--color-text); font-weight: 600; min-width: 40px; text-align: right; }
+
+/* === Merged: ContextMenu.css === */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  background-color: var(--color-elevated-bg);
+  border: 1px solid var(--color-elevated-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 180px;
+}
+
+.context-menu ul { list-style: none; margin: 0; padding: 0; }
+.context-menu li {
+  padding: 0 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  height: 24px;
+  line-height: 24px;
+}
+.context-menu li:hover { background-color: var(--color-accent); color: #fff; }
