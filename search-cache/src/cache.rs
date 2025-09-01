@@ -592,9 +592,10 @@ impl SearchCache {
             return Err(HandleFSEError::Rescan);
         }
         for scan_path in scan_paths(events) {
+            info!("Scanning path: {scan_path:?}");
             let folder = self.scan_path_recursive(&scan_path);
             if folder.is_some() {
-                info!("Node changed: {:?}, {folder:?}", scan_path);
+                info!("Node changed: {folder:?}");
             }
         }
         if let Some(max_event_id) = max_event_id {
