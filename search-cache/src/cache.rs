@@ -9,11 +9,7 @@ use query_segmentation::{query_segmentation, Segment};
 use serde::{Deserialize, Serialize};
 use slab::Slab;
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    ffi::{CString, OsStr},
-    io::ErrorKind,
-    path::{Path, PathBuf},
-    time::Instant,
+    collections::{BTreeMap, BTreeSet}, ffi::{CString, OsStr}, io::ErrorKind, num::NonZeroU64, path::{Path, PathBuf}, time::Instant
 };
 use tracing::{debug, info};
 use typed_num::Num;
@@ -607,8 +603,8 @@ impl SearchCache {
 
 #[derive(Encode, Decode)]
 pub struct MetadataCache {
-    ctime_index: BTreeMap<u64, Vec<usize>>,
-    mtime_index: BTreeMap<u64, Vec<usize>>,
+    ctime_index: BTreeMap<NonZeroU64, Vec<usize>>,
+    mtime_index: BTreeMap<NonZeroU64, Vec<usize>>,
     size_index: BTreeMap<u64, Vec<usize>>,
     /// For slab nodes without metadata
     no_ctime_index: BTreeSet<usize>,

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, Metadata},
     io::{Error, ErrorKind},
+    num::NonZeroU64,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
@@ -21,8 +22,8 @@ pub struct Node {
 #[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone, Copy)]
 pub struct NodeMetadata {
     pub r#type: NodeFileType,
-    pub ctime: Option<u64>,
-    pub mtime: Option<u64>,
+    pub ctime: Option<NonZeroU64>,
+    pub mtime: Option<NonZeroU64>,
     pub size: u64,
 }
 
@@ -39,12 +40,12 @@ impl NodeMetadata {
             .created()
             .ok()
             .and_then(|x| x.duration_since(UNIX_EPOCH).ok())
-            .map(|x| x.as_secs());
+            .and_then(|x| x.as_secs().try_into().ok());
         let mtime = metadata
             .modified()
             .ok()
             .and_then(|x| x.duration_since(UNIX_EPOCH).ok())
-            .map(|x| x.as_secs());
+            .and_then(|x| x.as_secs().try_into().ok());
         let size = metadata.size();
         Self {
             r#type,
