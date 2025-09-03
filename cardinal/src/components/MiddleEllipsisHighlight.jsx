@@ -120,7 +120,7 @@ export function MiddleEllipsisHighlight({ text, className, searchQuery }) {
   }, [updateWidth]);
 
   return (
-    <span ref={containerRef} className={className} title={text}>
+    <span ref={containerRef} className={className} title={text} style={{ display: 'block', width: '100%' }}>
       {displayParts.map((part, index) => (part.isHighlight ? <strong key={index}>{part.text}</strong> : <span key={index}>{part.text}</span>))}
     </span>
   );

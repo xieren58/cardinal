@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose, Engine as _};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use fswalk::NodeMetadata;
@@ -17,6 +18,7 @@ use std::{
 use tauri::{Emitter, RunEvent, State};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::EnvFilter;
+use rayon::prelude::*;
 
 static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     directories::ProjectDirs::from("", "", "Cardinal")
@@ -58,6 +60,7 @@ async fn search(query: String, state: State<'_, SearchState>) -> Result<Vec<usiz
 struct NodeInfo {
     path: String,
     metadata: Option<NodeMetadata>,
+    icon: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -80,10 +83,22 @@ async fn get_nodes_info(
         .node_info_results_rx
         .recv()
         .map(|x| {
-            x.into_iter()
-                .map(|SearchResultNode { path, metadata }| NodeInfo {
-                    path: path.to_string_lossy().into_owned(),
-                    metadata,
+            x.into_par_iter()
+                .map(|SearchResultNode { path, metadata }| {
+                    let icon = path
+                        .to_str()
+                        .and_then(|s| fs_icon::icon_of_path(s))
+                        .map(|data| {
+                            format!(
+                                "data:image/png;base64,{}",
+                                general_purpose::STANDARD.encode(&data)
+                            )
+                        });
+                    NodeInfo {
+                        path: path.to_string_lossy().into_owned(),
+                        metadata,
+                        icon,
+                    }
                 })
                 .collect()
         })

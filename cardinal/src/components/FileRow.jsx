@@ -35,7 +35,10 @@ export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery }) {
   return (
     <div style={style} className={`row ${rowIndex % 2 === 0 ? 'row-even' : 'row-odd'}`} onContextMenu={handleContextMenu}>
       <div className="columns row-inner" title={path}>
-        <MiddleEllipsisHighlight className="filename-text" text={filename} searchQuery={searchQuery} />
+        <div className="filename-column">
+          {item.icon && <img src={item.icon} alt="icon" className="file-icon" />}
+          <MiddleEllipsisHighlight className="filename-text" text={filename} searchQuery={searchQuery} />
+        </div>
         {/* Path 列显示目录路径（不包含文件名） */}
         <span className="path-text" title={directoryPath}>
           {splitTextWithHighlight(directoryPath || '', searchQuery).map((part, i) => (
