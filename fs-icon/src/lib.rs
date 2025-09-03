@@ -7,10 +7,10 @@ pub fn icon_of_path(path: &str) -> Option<Vec<u8>> {
     let path_ns = NSString::from_str(path);
     let image = unsafe { NSWorkspace::sharedWorkspace().iconForFile(&path_ns) };
 
-    // zoom in and you will see that the small icon in Finder is 32x32
+    // zoom in and you will see that the small icon in Finder is 32x32, here we keep it at 64x64 for better visibility
     let (new_width, new_height) = unsafe {
-        let width = 32.0;
-        let height = 32.0;
+        let width = 64.0;
+        let height = 64.0;
         // keep aspect ratio
         let old_width = image.size().width;
         let old_height = image.size().height;
