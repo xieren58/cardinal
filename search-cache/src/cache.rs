@@ -9,7 +9,12 @@ use query_segmentation::{query_segmentation, Segment};
 use serde::{Deserialize, Serialize};
 use slab::Slab;
 use std::{
-    collections::{BTreeMap, BTreeSet}, ffi::{CString, OsStr}, io::ErrorKind, num::NonZeroU64, path::{Path, PathBuf}, time::Instant
+    collections::{BTreeMap, BTreeSet},
+    ffi::{CString, OsStr},
+    io::ErrorKind,
+    num::NonZeroU64,
+    path::{Path, PathBuf},
+    time::Instant,
 };
 use tracing::{debug, info};
 use typed_num::Num;
