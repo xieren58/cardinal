@@ -42,6 +42,57 @@ function App() {
     prevResultsLenRef.current = results.length;
   }, [results, currentQuery]);
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Prevent F5 or Ctrl+R (Windows/Linux) and Command+R (Mac) from refreshing the page
+      if (
+        event.key === 'F5' ||
+        (event.ctrlKey && event.key === 'r') ||
+        (event.metaKey && event.key === 'r')
+      ) {
+        event.preventDefault();
+      }
+    };
+
+    const handleContextMenu = (event) => {
+      // Only prevent the default context menu if the click is not on an element
+      // that should have a custom context menu.
+      // A simple check could be to see if the target or its parents have a specific class or attribute.
+      // For now, we will prevent it everywhere except on rows and headers.
+      if (!event.target.closest('.virtual-list') && !event.target.closest('.column-header')) {
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
+
+  useEffect(() => {
+    const disableRefresh = () => { 
+      document.addEventListener('keydown', function (event) { 
+        // Prevent F5 or Ctrl+R (Windows/Linux) and Command+R (Mac) from refreshing the page 
+        if ( 
+          event.key === 'F5' || 
+          (event.ctrlKey && event.key === 'r') || 
+          (event.metaKey && event.key === 'r') 
+        ) { 
+          event.preventDefault(); 
+        } 
+      }); 
+    
+      document.addEventListener('contextmenu', function (event) { 
+        event.preventDefault(); 
+      }); 
+    }; 
+    disableRefresh();
+  }, []);
+
   // 滚动同步处理 - 单向同步版本（Grid -> Header）
   const handleHorizontalSync = useCallback((scrollLeft) => {
     if (headerRef.current) headerRef.current.scrollLeft = scrollLeft;
