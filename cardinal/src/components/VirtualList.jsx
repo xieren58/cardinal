@@ -124,8 +124,8 @@ export const VirtualList = forwardRef(function VirtualList({
 	// 暴露的API
 	useImperativeHandle(ref, () => ({
 		scrollToTop: () => updateScrollAndRange(0),
-		ensureRangeLoaded,
-	}), [updateScrollAndRange, ensureRangeLoaded]);
+		ensureRangeLoaded: (start, end) => ensureRangeLoaded(start, end, cache, setCache),
+	}), [updateScrollAndRange, ensureRangeLoaded, cache, setCache]);
 
 	// ----- rendered items memo -----
 	// 渲染的项目
