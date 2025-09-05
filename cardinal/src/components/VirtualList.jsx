@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Scrollbar from './Scrollbar';
+import { useDataLoader } from '../hooks/useDataLoader';
 
 /**
  * 虚拟滚动列表组件（含行数据按需加载缓存）
@@ -27,7 +28,6 @@ export const VirtualList = forwardRef(function VirtualList({
 	const containerRef = useRef(null);
 	const viewportRef = useRef(null);
 	const lastScrollLeftRef = useRef(0);
-	const loadingRef = useRef(new Set());
 
 	// ----- state -----
 	const [cache, setCache] = useState(() => new Map());
@@ -38,6 +38,10 @@ export const VirtualList = forwardRef(function VirtualList({
 	// ----- derived -----
 	// 行数直接来自 results（不再支持显式 rowCount）
 	const rowCount = results?.length ?? 0;
+
+	// ----- data loader -----
+	const { ensureRangeLoaded } = useDataLoader(results, rowCount);
+
 	// 计算总虚拟高度和滚动范围
 	const { totalHeight, maxScrollTop } = useMemo(() => ({
 		totalHeight: rowCount * rowHeight,
@@ -69,33 +73,7 @@ export const VirtualList = forwardRef(function VirtualList({
 	}, [maxScrollTop, computeRange, viewportHeight, setRangeIfChanged]);
 
 	// ----- data loading -----
-	// 内置行数据加载
-	const ensureRangeLoaded = useCallback(async (start, end) => {
-		if (!results || start < 0 || end < start || rowCount === 0) return;
-		const needLoading = [];
-		for (let i = start; i <= end; i++) {
-			if (!cache.has(i) && !loadingRef.current.has(i)) {
-				needLoading.push(i);
-				loadingRef.current.add(i);
-			}
-		}
-		if (needLoading.length === 0) return;
-		try {
-			const slice = needLoading.map(i => results[i]);
-			const fetched = await invoke('get_nodes_info', { results: slice });
-			setCache(prev => {
-				const newCache = new Map(prev);
-				needLoading.forEach((originalIndex, idx) => {
-					newCache.set(originalIndex, fetched[idx]);
-					loadingRef.current.delete(originalIndex);
-				});
-				return newCache;
-			});
-		} catch (err) {
-			needLoading.forEach(i => loadingRef.current.delete(i));
-			console.error('Failed loading rows', err);
-		}
-	}, [results, rowCount, cache]);
+	// 使用独立的 data loader hook
 
 	// ----- event handlers -----
 	// 垂直滚动（阻止默认以获得一致行为）
@@ -117,13 +95,12 @@ export const VirtualList = forwardRef(function VirtualList({
 	// 结果集变化时重置缓存
 	useEffect(() => { // results change -> reset cache
 		setCache(new Map());
-		loadingRef.current.clear();
 	}, [results]);
 
 	// range 变化时自动加载
 	useEffect(() => { // auto load
-		if (range.end >= range.start) ensureRangeLoaded(range.start, range.end);
-	}, [range, ensureRangeLoaded]);
+		if (range.end >= range.start) ensureRangeLoaded(range.start, range.end, cache, setCache);
+	}, [range, ensureRangeLoaded, cache, setCache]);
 
 	// 监听容器尺寸变化
 	useLayoutEffect(() => { // observe container height
