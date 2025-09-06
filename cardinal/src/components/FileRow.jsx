@@ -27,7 +27,7 @@ export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery }) {
   const ctimeText = ctimeSec != null ? new Date(ctimeSec * 1000).toLocaleString() : null;
 
   const sizeBytes = typeof item !== 'string' ? (item?.metadata?.size ?? item?.size) : undefined;
-  const sizeText = formatKB(sizeBytes);
+  const sizeText = item?.metadata?.type !== 1 ? formatKB(sizeBytes) : null;
 
   const handleContextMenu = (e) => {
     e.preventDefault();
