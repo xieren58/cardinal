@@ -119,6 +119,32 @@ fn open_in_finder(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to reveal path in Finder: {}", e))?;
     }
+    #[cfg(target_os = "windows")]
+    {
+        let p = Path::new(&path);
+        // On Windows, use explorer.exe /select to reveal the file.
+        std::process::Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(p)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal path in Explorer: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let p = Path::new(&path);
+        // On Linux, use xdg-open to open the parent directory.
+        if let Some(parent) = p.parent() {
+            std::process::Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| format!("Failed to open parent directory: {}", e))?;
+        } else {
+            std::process::Command::new("xdg-open")
+                .arg(p)
+                .spawn()
+                .map_err(|e| format!("Failed to open path: {}", e))?;
+        }
+    }
     Ok(())
 }
 
