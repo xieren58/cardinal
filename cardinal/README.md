@@ -34,6 +34,7 @@
             - 好像速度也能接受
 + 加一个页面渲染文件体积 treemap, 支持钻取（点击文件夹展开子项）。
     + 磁盘整理需求
+- fs-icon 仍差强人意，目前显示的和 finder 仍然不一致，怀疑Finder用的别的预览 API(QLThumbnailGenerator?)
 
 ```bash
 npm run tauri dev -- --release --features dev
