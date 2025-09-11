@@ -4,7 +4,7 @@ use base64::{engine::general_purpose, Engine as _};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use fswalk::NodeMetadata;
-use search_cache::{HandleFSEError, SearchCache, SearchResultNode, WalkData};
+use search_cache::{HandleFSEError, SearchCache, SearchResultNode, SlabIndex, WalkData};
 use serde::Serialize;
 use std::{
     cell::LazyCell,
@@ -32,14 +32,14 @@ static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
 
 struct SearchState {
     search_tx: Sender<String>,
-    result_rx: Receiver<Result<Vec<usize>>>,
+    result_rx: Receiver<Result<Vec<SlabIndex>>>,
 
-    node_info_tx: Sender<Vec<usize>>,
+    node_info_tx: Sender<Vec<SlabIndex>>,
     node_info_results_rx: Receiver<Vec<SearchResultNode>>,
 }
 
 #[tauri::command]
-async fn search(query: String, state: State<'_, SearchState>) -> Result<Vec<usize>, String> {
+async fn search(query: String, state: State<'_, SearchState>) -> Result<Vec<SlabIndex>, String> {
     // 发送搜索请求到后台线程
     state
         .search_tx
@@ -90,7 +90,7 @@ struct StatusBarUpdate {
 
 #[tauri::command]
 async fn get_nodes_info(
-    results: Vec<usize>,
+    results: Vec<SlabIndex>,
     state: State<'_, SearchState>,
 ) -> Result<Vec<NodeInfo>, String> {
     state
@@ -180,8 +180,8 @@ pub fn run() -> Result<()> {
     // Create communication channels
     let (finish_tx, finish_rx) = bounded::<Sender<SearchCache>>(1);
     let (search_tx, search_rx) = unbounded::<String>();
-    let (result_tx, result_rx) = unbounded::<Result<Vec<usize>>>();
-    let (node_info_tx, node_info_rx) = unbounded::<Vec<usize>>();
+    let (result_tx, result_rx) = unbounded::<Result<Vec<SlabIndex>>>();
+    let (node_info_tx, node_info_rx) = unbounded::<Vec<SlabIndex>>();
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
 
     // 运行Tauri应用
