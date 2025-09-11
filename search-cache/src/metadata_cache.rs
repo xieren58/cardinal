@@ -1,4 +1,4 @@
-use crate::SlabNodeMetadata;
+use crate::SlabNodeMetadataCompact;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -21,8 +21,8 @@ impl MetadataCache {
         Self::default()
     }
 
-    pub fn insert(&mut self, index: usize, metadata: SlabNodeMetadata) {
-        if let Some(ctime) = metadata.as_ref().and_then(|x| x.ctime) {
+    pub fn insert(&mut self, index: usize, metadata: SlabNodeMetadataCompact) {
+        if let Some(ctime) = metadata.as_ref().and_then(|x| x.ctime()) {
             if let Some(indexes) = self.ctime_index.get_mut(&ctime) {
                 if !indexes.iter().any(|&x| x == index) {
                     indexes.push(index);
@@ -33,7 +33,7 @@ impl MetadataCache {
         } else {
             self.no_ctime_index.insert(index);
         }
-        if let Some(mtime) = metadata.as_ref().and_then(|x| x.mtime) {
+        if let Some(mtime) = metadata.as_ref().and_then(|x| x.mtime()) {
             if let Some(indexes) = self.mtime_index.get_mut(&mtime) {
                 if !indexes.iter().any(|&x| x == index) {
                     indexes.push(index);
@@ -57,8 +57,8 @@ impl MetadataCache {
         }
     }
 
-    pub fn remove(&mut self, index: usize, metadata: SlabNodeMetadata) {
-        if let Some(ctime) = metadata.as_ref().and_then(|x| x.ctime) {
+    pub fn remove(&mut self, index: usize, metadata: SlabNodeMetadataCompact) {
+        if let Some(ctime) = metadata.as_ref().and_then(|x| x.ctime()) {
             if let Some(indexes) = self.ctime_index.get_mut(&ctime) {
                 indexes.retain(|&x| x != index);
                 if indexes.is_empty() {
@@ -68,7 +68,7 @@ impl MetadataCache {
         } else {
             self.no_ctime_index.remove(&index);
         }
-        if let Some(mtime) = metadata.as_ref().and_then(|x| x.mtime) {
+        if let Some(mtime) = metadata.as_ref().and_then(|x| x.mtime()) {
             if let Some(indexes) = self.mtime_index.get_mut(&mtime) {
                 indexes.retain(|&x| x != index);
                 if indexes.is_empty() {

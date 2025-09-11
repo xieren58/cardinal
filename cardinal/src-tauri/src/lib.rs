@@ -3,8 +3,7 @@ use anyhow::{Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
-use fswalk::NodeMetadata;
-use search_cache::{HandleFSEError, SearchCache, SearchResultNode, SlabIndex, WalkData};
+use search_cache::{HandleFSEError, SearchCache, SearchResultNode, SlabIndex, SlabNodeMetadata, WalkData};
 use serde::Serialize;
 use std::{
     cell::LazyCell,
@@ -72,12 +71,12 @@ struct NodeInfoMetadata {
 }
 
 impl NodeInfoMetadata {
-    pub fn from_metadata(metadata: NodeMetadata) -> Self {
+    pub fn from_metadata(metadata: SlabNodeMetadata<'_>) -> Self {
         Self {
             r#type: metadata.r#type() as u8,
             size: metadata.size(),
-            ctime: metadata.ctime.map(|x| x.get()).unwrap_or_default(),
-            mtime: metadata.mtime.map(|x| x.get()).unwrap_or_default(),
+            ctime: metadata.ctime().map(|x| x.get()).unwrap_or_default(),
+            mtime: metadata.mtime().map(|x| x.get()).unwrap_or_default(),
         }
     }
 }
@@ -115,7 +114,7 @@ async fn get_nodes_info(
                         });
                     NodeInfo {
                         path: path.to_string_lossy().into_owned(),
-                        metadata: metadata.map(NodeInfoMetadata::from_metadata),
+                        metadata: metadata.as_ref().map(NodeInfoMetadata::from_metadata),
                         icon,
                     }
                 })

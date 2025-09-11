@@ -1,11 +1,10 @@
 use crate::{
-    OptionSlabIndex, SlabIndex, ThinSlab,
-    persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file},
+    persistent::{read_cache_from_file, write_cache_to_file, PersistentStorage}, type_and_size::StateTypeSize, OptionSlabIndex, SlabIndex, State, ThinSlab
 };
 use anyhow::{Context, Result, anyhow, bail};
 use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
 pub use fswalk::WalkData;
-use fswalk::{Node, NodeMetadata, walk_it};
+use fswalk::{Node, NodeFileType, NodeMetadata, walk_it};
 use namepool::NamePool;
 use query_segmentation::{Segment, query_segmentation};
 use serde::{Deserialize, Serialize};
@@ -14,6 +13,7 @@ use std::{
     collections::BTreeMap,
     ffi::{CString, OsStr},
     io::ErrorKind,
+    num::NonZeroU32,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -25,7 +25,7 @@ pub struct SlabNode {
     parent: OptionSlabIndex,
     children: SmallVec<SlabIndex, 2>,
     name: String,
-    metadata: SlabNodeMetadata,
+    metadata: SlabNodeMetadataCompact,
 }
 
 impl SlabNode {
@@ -39,7 +39,7 @@ impl SlabNode {
         }
     }
 
-    pub fn new(parent: Option<SlabIndex>, name: String, metadata: SlabNodeMetadata) -> Self {
+    pub fn new(parent: Option<SlabIndex>, name: String, metadata: SlabNodeMetadataCompact) -> Self {
         Self {
             parent: OptionSlabIndex::from_option(parent),
             children: SmallVec::new(),
@@ -49,38 +49,95 @@ impl SlabNode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum SlabNodeMetadata {
-    Unaccessible,
-    Some(NodeMetadata),
-    None,
+/// SlabNodeMetadataCompact with state ensured to be Some
+pub struct SlabNodeMetadata<'a>(&'a SlabNodeMetadataCompact);
+
+impl<'a> SlabNodeMetadata<'a> {
+    pub fn r#type(&self) -> NodeFileType {
+        self.0.state_type_and_size.r#type()
+    }
+
+    pub fn size(&self) -> u64 {
+        self.0.state_type_and_size.size()
+    }
+
+    pub fn ctime(&self) -> Option<NonZeroU32> {
+        self.0.ctime
+    }
+
+    pub fn mtime(&self) -> Option<NonZeroU32> {
+        self.0.mtime
+    }
 }
 
-impl SlabNodeMetadata {
-    pub fn as_ref(&self) -> Option<&NodeMetadata> {
-        match self {
-            Self::Some(metadata) => Some(metadata),
-            Self::Unaccessible | Self::None => None,
+/// Use a compact form so that
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct SlabNodeMetadataCompact {
+    state_type_and_size: StateTypeSize,
+    ctime: Option<NonZeroU32>,
+    mtime: Option<NonZeroU32>,
+}
+
+impl SlabNodeMetadataCompact {
+    pub fn unaccessible() -> Self {
+        Self {
+            state_type_and_size: StateTypeSize::unaccessible(),
+            ctime: None,
+            mtime: None
+        }
+    } 
+
+    pub fn some(
+        NodeMetadata {
+            r#type,
+            size,
+            ctime,
+            mtime,
+        }: NodeMetadata,
+    ) -> Self {
+        Self {
+            state_type_and_size: StateTypeSize::some(r#type, size),
+            ctime: ctime.and_then(|x| NonZeroU32::try_from(x).ok()),
+            mtime: mtime.and_then(|x| NonZeroU32::try_from(x).ok()),
+        }
+    }
+
+    pub fn none() -> Self {
+        Self {
+            state_type_and_size: StateTypeSize::none(),
+            ctime: None,
+            mtime: None
+        }
+    }
+
+    pub fn state(&self) -> State {
+        self.state_type_and_size.state()
+    }
+
+    pub fn as_ref(&self) -> Option<SlabNodeMetadata<'_>> {
+        match self.state() {
+            State::Some => Some(SlabNodeMetadata(&self)),
+            State::Unaccessible | State::None => None,
         }
     }
 
     pub fn is_some(&self) -> bool {
-        matches!(self, Self::Some(_))
+        matches!(self.state(), State::Some)
     }
 
     pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
+        matches!(self.state(), State::None)
     }
 
     pub fn is_unaccessible(&self) -> bool {
-        matches!(self, Self::Unaccessible)
+        matches!(self.state(), State::Unaccessible)
     }
 }
 
 #[derive(Debug)]
 pub struct SearchResultNode {
     pub path: PathBuf,
-    pub metadata: Option<NodeMetadata>,
+    pub metadata: SlabNodeMetadataCompact,
 }
 
 pub struct SearchCache {
@@ -373,8 +430,8 @@ impl SearchCache {
                     Some(current),
                     name,
                     match metadata {
-                        Some(metadata) => SlabNodeMetadata::Some(metadata),
-                        None => SlabNodeMetadata::Unaccessible,
+                        Some(metadata) => SlabNodeMetadataCompact::some(metadata.into()),
+                        None => SlabNodeMetadataCompact::unaccessible(),
                     },
                 );
                 let index = self.push_node(node);
@@ -530,29 +587,20 @@ impl SearchCache {
             .into_iter()
             .map(|node_index| {
                 let path = self.node_path(node_index);
-                let metadata = self.slab.get_mut(node_index).and_then(|node| {
-                    match node.metadata {
-                        SlabNodeMetadata::Unaccessible => None,
-                        SlabNodeMetadata::Some(metadata) => Some(metadata),
-                        SlabNodeMetadata::None => {
-                            if !FETCH_META {
-                                None
-                            } else if let Some(path) = &path {
-                                // try fetching metadata if it's not cached and cache them
-                                let metadata =
-                                    std::fs::symlink_metadata(path).map(NodeMetadata::from).ok();
-                                node.metadata = match metadata {
-                                    Some(metadata) => SlabNodeMetadata::Some(metadata),
-                                    None => SlabNodeMetadata::Unaccessible,
-                                };
-                                // self.metadata_cache.insert(node_index, metadata);
-                                metadata
-                            } else {
-                                None
-                            }
+                let metadata = self.slab.get_mut(node_index).map(|node| {
+                    match (node.metadata.state(), &path) {
+                        (State::None, Some(path)) if FETCH_META => {
+                            // try fetching metadata if it's not cached and cache them
+                            let metadata = match std::fs::symlink_metadata(path) {
+                                Ok(metadata) => SlabNodeMetadataCompact::some(metadata.into()),
+                                Err(_) => SlabNodeMetadataCompact::unaccessible(),
+                            };
+                            node.metadata = metadata;
+                            metadata
                         }
+                        _ => node.metadata,
                     }
-                });
+                }).unwrap_or_else(|| SlabNodeMetadataCompact::unaccessible());
                 SearchResultNode {
                     path: path.unwrap_or_default(),
                     metadata,
@@ -656,8 +704,8 @@ fn construct_node_slab(
     slab: &mut ThinSlab<SlabNode>,
 ) -> SlabIndex {
     let metadata = match node.metadata {
-        Some(metadata) => SlabNodeMetadata::Some(metadata),
-        None => SlabNodeMetadata::None,
+        Some(metadata) => SlabNodeMetadataCompact::some(metadata.into()),
+        None => SlabNodeMetadataCompact::none(),
     };
     let slab_node = SlabNode::new(parent, node.name.clone(), metadata);
     let index = slab.insert(slab_node);
@@ -680,9 +728,9 @@ impl SearchCache {
         node: &Node,
     ) -> SlabIndex {
         let metadata = match node.metadata {
-            Some(metadata) => SlabNodeMetadata::Some(metadata),
+            Some(metadata) => SlabNodeMetadataCompact::some(metadata.into()),
             // This function should only be called with Node fetched with metadata
-            None => SlabNodeMetadata::Unaccessible,
+            None => SlabNodeMetadataCompact::unaccessible(),
         };
         let slab_node = SlabNode::new(parent, node.name.clone(), metadata);
         let index = self.push_node(slab_node);
@@ -1170,7 +1218,7 @@ mod tests {
         );
         assert_eq!(file_slab_meta.size(), 4, "Size mismatch for event_file.txt");
         assert!(
-            file_slab_meta.mtime.is_some(),
+            file_slab_meta.mtime().is_some(),
             "mtime should be populated for event_file.txt"
         );
 
@@ -1205,7 +1253,7 @@ mod tests {
             .as_ref()
             .expect("Metadata for event_subdir should be populated by event handler");
         assert!(
-            dir_slab_meta.mtime.is_some(),
+            dir_slab_meta.mtime().is_some(),
             "mtime should be populated for event_subdir"
         );
 
@@ -1229,7 +1277,7 @@ mod tests {
             "Size mismatch for file_in_event_subdir.txt"
         );
         assert!(
-            file_in_subdir_slab_meta.mtime.is_some(),
+            file_in_subdir_slab_meta.mtime().is_some(),
             "mtime should be populated for file_in_event_subdir.txt"
         );
     }

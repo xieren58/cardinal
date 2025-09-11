@@ -1158,7 +1158,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "redox_syscall",
- "smallvec",
+ "smallvec 1.15.1",
  "windows-targets 0.52.6",
 ]
 
@@ -1400,13 +1400,15 @@ dependencies = [
  "anyhow",
  "cardinal-sdk",
  "crossbeam-channel",
+ "enumn",
  "fswalk",
  "namepool",
  "postcard",
  "query-segmentation",
  "serde",
+ "serde_repr",
  "slab",
- "smallvec",
+ "smallvec 2.0.0-alpha.11",
  "tempdir",
  "tracing",
  "typed-num",
@@ -1509,6 +1511,14 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "smallvec"
+version = "2.0.0-alpha.11"
+source = "git+https://github.com/servo/rust-smallvec?branch=v2#ae2f943c957ba8fb23ede6a646e1ab85febeaf3f"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "spin"
@@ -1673,7 +1683,7 @@ dependencies = [
  "once_cell",
  "regex-automata",
  "sharded-slab",
- "smallvec",
+ "smallvec 1.15.1",
  "thread_local",
  "tracing",
  "tracing-core",
