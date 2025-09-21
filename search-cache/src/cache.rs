@@ -523,7 +523,7 @@ impl SearchCache {
             self.remove_node(old_node);
         }
         // For incremental data, we need metadata
-        let walk_data = WalkData::new(self.ignore_path.clone(), true, self.cancel);
+        let walk_data = WalkData::new(self.ignore_path, true, self.cancel);
         walk_it(raw_path, &walk_data).map(|node| {
             let node = self.create_node_slab_update_name_index_and_name_pool(Some(parent), &node);
             // Push the newly created node to the parent's children

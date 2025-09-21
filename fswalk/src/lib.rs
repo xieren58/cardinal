@@ -368,10 +368,36 @@ mod tests {
             });
             s.spawn(|| {
                 while done.load(Ordering::Relaxed) == false {
-                    std::thread::sleep(std::time::Duration::from_secs(1));
                     let files = walk_data.num_files.load(Ordering::Relaxed);
                     let dirs = walk_data.num_dirs.load(Ordering::Relaxed);
                     println!("so far: {files} files, {dirs} dirs");
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
+            });
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn test_search_simulator() {
+        let done = AtomicBool::new(false);
+        let walk_data = WalkData::new(Some(Path::new("/System/Volumes/Data")), true, None);
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                let node = walk_it(
+                    Path::new("/Library/Developer/CoreSimulator/Volumes/iOS_23A343"),
+                    &walk_data,
+                )
+                .unwrap();
+                println!("sim has {} children", node.children.len());
+                done.store(true, Ordering::Relaxed);
+            });
+            s.spawn(|| {
+                while done.load(Ordering::Relaxed) == false {
+                    let files = walk_data.num_files.load(Ordering::Relaxed);
+                    let dirs = walk_data.num_dirs.load(Ordering::Relaxed);
+                    println!("so far: {files} files, {dirs} dirs");
+                    std::thread::sleep(std::time::Duration::from_secs(1));
                 }
             });
         });
