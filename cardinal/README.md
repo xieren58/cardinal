@@ -11,12 +11,6 @@
 - metadata 索引
     - ctime, mtime, size
     - 目前 metadata 启动后自动 fetching 流程不太明朗(需要更细粒度的锁)，先搁置
-- 内存优化
-    + APFS 每个目录下面最多只能有 21 亿个文件 https://superuser.com/questions/845143/any-limitation-for-having-many-files-in-a-directory-in-macos
-        + Vec with u32 capacity + length
-            + capacity + length 都用 u32 表示 24 byte -> 16 byte
-        + 最后使用了 ThinVec，反正大多数Node都是文件，ThinVec::new() 也不会产生额外的卫星内存
-            + 24 byte -> 8 byte
 - Windows/NTFS 支持
 
 # TODO
