@@ -13,6 +13,13 @@ import { usePreventRefresh } from './hooks/usePreventRefresh';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, once } from '@tauri-apps/api/event';
 
+const cancelTimer = (timerRef) => {
+  if (timerRef.current) {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+};
+
 const initialState = {
   results: [],
   isInitialized: false,
@@ -94,12 +101,11 @@ function App() {
 
   const headerRef = useRef(null);
   const virtualListRef = useRef(null);
-  const prevSearchSignatureRef = useRef({ query: '', useRegex: false, caseSensitive: false });
-  const prevResultsLenRef = useRef(0);
   const debounceTimerRef = useRef(null);
   const loadingDelayTimerRef = useRef(null);
   const hasInitialSearchRunRef = useRef(false);
   const latestSearchRef = useRef({ query: '', useRegex: false, caseSensitive: false });
+  const searchVersionRef = useRef(0);
   const [searchParams, updateSearchParams] = useReducer((prev, patch) => {
     const next = { ...prev, ...patch };
     latestSearchRef.current = next;
@@ -147,6 +153,8 @@ function App() {
   const handleSearch = useCallback(async (overrides = {}) => {
     const nextSearch = { ...latestSearchRef.current, ...overrides };
     latestSearchRef.current = nextSearch;
+    const requestVersion = searchVersionRef.current + 1;
+    searchVersionRef.current = requestVersion;
 
     const { query, useRegex: nextUseRegex, caseSensitive: nextCaseSensitive } = nextSearch;
     const startTs = performance.now();
@@ -156,9 +164,7 @@ function App() {
     dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
 
     if (!isInitial) {
-      if (loadingDelayTimerRef.current) {
-        clearTimeout(loadingDelayTimerRef.current);
-      }
+      cancelTimer(loadingDelayTimerRef);
       loadingDelayTimerRef.current = setTimeout(() => {
         dispatch({ type: 'SEARCH_LOADING_DELAY' });
         loadingDelayTimerRef.current = null;
@@ -174,10 +180,11 @@ function App() {
         }
       });
 
-      if (loadingDelayTimerRef.current) {
-        clearTimeout(loadingDelayTimerRef.current);
-        loadingDelayTimerRef.current = null;
+      if (searchVersionRef.current !== requestVersion) {
+        return;
       }
+
+      cancelTimer(loadingDelayTimerRef);
 
       const endTs = performance.now();
       const duration = endTs - startTs;
@@ -194,10 +201,11 @@ function App() {
     } catch (error) {
       console.error('Search failed:', error);
 
-      if (loadingDelayTimerRef.current) {
-        clearTimeout(loadingDelayTimerRef.current);
-        loadingDelayTimerRef.current = null;
+      if (searchVersionRef.current !== requestVersion) {
+        return;
       }
+
+      cancelTimer(loadingDelayTimerRef);
 
       const endTs = performance.now();
       const duration = endTs - startTs;
@@ -217,9 +225,7 @@ function App() {
   const onQueryChange = useCallback((e) => {
     const inputValue = e.target.value;
     updateSearchParams({ query: inputValue });
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
+    cancelTimer(debounceTimerRef);
     debounceTimerRef.current = setTimeout(() => {
       handleSearch({ query: inputValue });
     }, SEARCH_DEBOUNCE_MS);
@@ -236,51 +242,32 @@ function App() {
   }, [updateSearchParams]);
 
   useEffect(() => () => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    if (loadingDelayTimerRef.current) {
-      clearTimeout(loadingDelayTimerRef.current);
-    }
+    cancelTimer(debounceTimerRef);
+    cancelTimer(loadingDelayTimerRef);
   }, []);
 
   useEffect(() => {
     if (!hasInitialSearchRunRef.current) {
       handleSearch({ query: '' });
-    }
-  }, [handleSearch]);
-
-  useEffect(() => {
-    if (!hasInitialSearchRunRef.current) {
       return;
     }
     handleSearch();
   }, [caseSensitive, handleSearch, useRegex]);
 
-  // 优化的搜索结果处理逻辑（保持使用 useRef，但简化其他逻辑）
+  // scroll position reset & initial data preload on `results` change
   useEffect(() => {
-    if (results.length === 0) return;
+    const list = virtualListRef.current;
+    if (!list) return;
 
-    const prevSignature = prevSearchSignatureRef.current;
-    const currentSignature = { query: currentQuery, useRegex, caseSensitive };
-    const isNewSignature =
-      prevSignature.query !== currentSignature.query ||
-      prevSignature.useRegex !== currentSignature.useRegex ||
-      prevSignature.caseSensitive !== currentSignature.caseSensitive;
-    const wasEmpty = prevResultsLenRef.current === 0;
+    list.scrollToTop?.();
 
-    if (isNewSignature && virtualListRef.current) {
-      virtualListRef.current.scrollToTop();
+    if (!results.length || !list.ensureRangeLoaded) {
+      return;
     }
 
-    if ((isNewSignature || wasEmpty) && virtualListRef.current?.ensureRangeLoaded) {
-      const preloadCount = Math.min(30, results.length);
-      virtualListRef.current.ensureRangeLoaded(0, preloadCount - 1);
-    }
-
-    prevSearchSignatureRef.current = currentSignature;
-    prevResultsLenRef.current = results.length;
-  }, [results, currentQuery, useRegex, caseSensitive]);
+    const preloadCount = Math.min(30, results.length);
+    list.ensureRangeLoaded(0, preloadCount - 1);
+  }, [results]);
 
   // 滚动同步处理 - 单向同步版本（Grid -> Header）
   const handleHorizontalSync = useCallback((scrollLeft) => {
