@@ -56,7 +56,11 @@ export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery, cas
       title={path}
     >
       <div className="filename-column">
-        {item.icon && <img src={item.icon} alt="icon" className="file-icon" />}
+        {item.icon ? (
+          <img src={item.icon} alt="icon" className="file-icon" />
+        ) : (
+          <span className="file-icon file-icon-placeholder" aria-hidden="true" />
+        )}
         <MiddleEllipsisHighlight
           className="filename-text"
           text={filename}

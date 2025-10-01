@@ -484,8 +484,16 @@ button:active {
 
 .file-icon {
   width: 16px;
+  height: 16px;
   flex-shrink: 0;
   object-fit: contain;
+}
+
+.file-icon-placeholder {
+  display: inline-block;
+  border-radius: 4px;
+  background-color: var(--color-border);
+  opacity: 0.55;
 }
 
 /* Common meta cell styles */

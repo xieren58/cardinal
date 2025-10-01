@@ -3,10 +3,10 @@ use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
-use rayon::prelude::*;
+use rayon::spawn;
 use search_cache::{
-    HandleFSEError, SearchCache, SearchOptions, SearchResultNode, SlabIndex,
-    SlabNodeMetadata, WalkData,
+    HandleFSEError, SearchCache, SearchOptions, SearchResultNode, SlabIndex, SlabNodeMetadata,
+    WalkData,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -18,7 +18,7 @@ use std::{
     },
     time::Duration,
 };
-use tauri::{Emitter, RunEvent, State};
+use tauri::{AppHandle, Emitter, RunEvent, State};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::EnvFilter;
 
@@ -92,7 +92,6 @@ async fn search(
 struct NodeInfo {
     path: String,
     metadata: Option<NodeInfoMetadata>,
-    icon: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -120,39 +119,64 @@ struct StatusBarUpdate {
     processed_events: usize,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct IconPayload {
+    slab_index: SlabIndex,
+    icon: Option<String>,
+}
+
 #[tauri::command]
 async fn get_nodes_info(
     results: Vec<SlabIndex>,
     state: State<'_, SearchState>,
+    app_handle: AppHandle,
 ) -> Result<Vec<NodeInfo>, String> {
+    if results.is_empty() {
+        return Ok(Vec::new());
+    }
+
     state
         .node_info_tx
-        .send(results)
+        .send(results.clone())
         .map_err(|e| format!("Failed to send node info request: {:?}", e))?;
 
-    let node_info_results = state
+    let nodes = state
         .node_info_results_rx
         .recv()
-        .map(|x| {
-            x.into_par_iter()
-                .map(|SearchResultNode { path, metadata }| {
-                    let icon = path.to_str().and_then(fs_icon::icon_of_path).map(|data| {
+        .map_err(|e| format!("Failed to receive node info results: {:?}", e))?;
+
+    let handle = app_handle.clone();
+    let node_infos: Vec<_> = nodes
+        .into_iter()
+        .zip(results.into_iter())
+        .map(|(SearchResultNode { path, metadata }, slab_index)| {
+            let handle = handle.clone();
+            let icon_path = path.clone();
+            spawn(move || {
+                let icon = icon_path
+                    .to_str()
+                    .and_then(fs_icon::icon_of_path)
+                    .map(|data| {
                         format!(
                             "data:image/png;base64,{}",
                             general_purpose::STANDARD.encode(&data)
                         )
                     });
-                    NodeInfo {
-                        path: path.to_string_lossy().into_owned(),
-                        metadata: metadata.as_ref().map(NodeInfoMetadata::from_metadata),
-                        icon,
-                    }
-                })
-                .collect()
-        })
-        .map_err(|e| format!("Failed to receive node info results: {:?}", e))?;
 
-    Ok(node_info_results)
+                if let Err(err) = handle.emit("icon_update", IconPayload { slab_index, icon }) {
+                    tracing::warn!("Failed to emit icon update: {}", err);
+                }
+            });
+
+            NodeInfo {
+                path: path.to_string_lossy().into_owned(),
+                metadata: metadata.as_ref().map(NodeInfoMetadata::from_metadata),
+            }
+        })
+        .collect();
+
+    Ok(node_infos)
 }
 
 #[tauri::command]
