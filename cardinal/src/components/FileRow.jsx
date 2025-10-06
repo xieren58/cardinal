@@ -16,11 +16,12 @@ function deriveHighlightTerm(query) {
 export function FileRow({ item, rowIndex, style, onContextMenu, searchQuery, caseInsensitive }) {
   const highlightTerm = useMemo(() => deriveHighlightTerm(searchQuery), [searchQuery]);
   if (!item || (typeof item !== 'string' && !item?.path)) {
-    return null
+    return null;
   }
 
   const path = typeof item === 'string' ? item : item?.path;
-  let filename = '', directoryPath = '';
+  let filename = '',
+    directoryPath = '';
   if (path) {
     if (path === '/') {
       directoryPath = '/';

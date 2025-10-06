@@ -50,14 +50,14 @@ function applyMiddleEllipsis(parts, maxChars) {
   for (const part of parts) {
     const remainingSpace = leftChars - leftCount;
     if (remainingSpace <= 0) break;
-    
+
     if (part.text.length <= remainingSpace) {
       leftParts.push(part);
       leftCount += part.text.length;
     } else {
       leftParts.push({
         text: part.text.slice(0, remainingSpace),
-        isHighlight: part.isHighlight
+        isHighlight: part.isHighlight,
       });
       break;
     }
@@ -70,14 +70,14 @@ function applyMiddleEllipsis(parts, maxChars) {
     const part = parts[i];
     const remainingSpace = rightChars - rightCount;
     if (remainingSpace <= 0) break;
-    
+
     if (part.text.length <= remainingSpace) {
       rightParts.unshift(part);
       rightCount += part.text.length;
     } else {
       rightParts.unshift({
         text: part.text.slice(-remainingSpace),
-        isHighlight: part.isHighlight
+        isHighlight: part.isHighlight,
       });
       break;
     }
@@ -98,7 +98,7 @@ export function MiddleEllipsisHighlight({ text, className, highlightTerm, caseIn
   // 计算显示部分（只在 highlightedParts 或 containerWidth 变化时重新计算）
   const displayParts = useMemo(() => {
     if (!containerWidth || !highlightedParts.length) return highlightedParts;
-    
+
     const maxChars = Math.floor(containerWidth / CHAR_WIDTH) - 1;
     return applyMiddleEllipsis(highlightedParts, maxChars);
   }, [highlightedParts, containerWidth]);
@@ -114,17 +114,28 @@ export function MiddleEllipsisHighlight({ text, className, highlightTerm, caseIn
 
   useEffect(() => {
     updateWidth();
-    
+
     const resizeObserver = new ResizeObserver(updateWidth);
     const el = containerRef.current;
     if (el) resizeObserver.observe(el);
-    
+
     return () => resizeObserver.disconnect();
   }, [updateWidth]);
 
   return (
-    <span ref={containerRef} className={className} title={text} style={{ display: 'block', width: '100%' }}>
-      {displayParts.map((part, index) => (part.isHighlight ? <strong key={index}>{part.text}</strong> : <span key={index}>{part.text}</span>))}
+    <span
+      ref={containerRef}
+      className={className}
+      title={text}
+      style={{ display: 'block', width: '100%' }}
+    >
+      {displayParts.map((part, index) =>
+        part.isHighlight ? (
+          <strong key={index}>{part.text}</strong>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
     </span>
   );
 }

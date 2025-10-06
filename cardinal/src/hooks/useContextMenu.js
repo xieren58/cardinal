@@ -8,7 +8,7 @@ export function useContextMenu(autoFitColumns = null) {
     x: 0,
     y: 0,
     type: null,
-    data: null
+    data: null,
   });
 
   // 统一的菜单显示函数
@@ -20,22 +20,28 @@ export function useContextMenu(autoFitColumns = null) {
       x: e.clientX,
       y: e.clientY,
       type,
-      data
+      data,
     });
   }, []);
 
   // 文件菜单
-  const showContextMenu = useCallback((e, path) => {
-    showMenu(e, 'file', path);
-  }, [showMenu]);
+  const showContextMenu = useCallback(
+    (e, path) => {
+      showMenu(e, 'file', path);
+    },
+    [showMenu],
+  );
 
   // 头部菜单
-  const showHeaderContextMenu = useCallback((e) => {
-    showMenu(e, 'header');
-  }, [showMenu]);
+  const showHeaderContextMenu = useCallback(
+    (e) => {
+      showMenu(e, 'header');
+    },
+    [showMenu],
+  );
 
   const closeMenu = useCallback(() => {
-    setMenu(prev => ({ ...prev, visible: false }));
+    setMenu((prev) => ({ ...prev, visible: false }));
   }, []);
 
   // 根据类型生成菜单项
@@ -53,10 +59,12 @@ export function useContextMenu(autoFitColumns = null) {
       ];
     }
     if (menu.type === 'header' && autoFitColumns) {
-      return [{
-        label: 'Reset Column Widths',
-        action: autoFitColumns,
-      }];
+      return [
+        {
+          label: 'Reset Column Widths',
+          action: autoFitColumns,
+        },
+      ];
     }
     return [];
   };
@@ -66,6 +74,6 @@ export function useContextMenu(autoFitColumns = null) {
     showContextMenu,
     showHeaderContextMenu,
     closeMenu,
-    getMenuItems
+    getMenuItems,
   };
 }

@@ -6,13 +6,18 @@ export const COL_WIDTH_RATIOS = {
   path: 0.38, // 38%
   size: 0.08, // 8%
   modified: 0.145, // 14.5%
-  created: 0.145 // 14.5%
+  created: 0.145, // 14.5%
 };
 
 // 根据窗口宽度计算初始列宽
 export const calculateInitialColWidths = (windowWidth) => {
   // 使用常量滚动条宽度（需与 CSS 中的 --virtual-scrollbar-width 保持一致）
-  const availableWidth = windowWidth - (Object.keys(COL_WIDTH_RATIOS).length - 1) * COL_GAP - COLUMNS_EXTRA - CONTAINER_PADDING - SCROLLBAR_WIDTH;
+  const availableWidth =
+    windowWidth -
+    (Object.keys(COL_WIDTH_RATIOS).length - 1) * COL_GAP -
+    COLUMNS_EXTRA -
+    CONTAINER_PADDING -
+    SCROLLBAR_WIDTH;
 
   const calculatedWidths = {};
 

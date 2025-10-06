@@ -2,7 +2,9 @@
 /* === Base & Theme Tokens === */
 
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "San Francisco", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'San Francisco',
+    'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 24px;
@@ -35,13 +37,13 @@
   -webkit-text-size-adjust: 100%;
 
   /* Layout tokens */
-  --row-height: 24px;                /* 与虚拟列表 rowHeight 同步 */
-  --col-gap: 12px;                   /* 列之间的间隙 */
-  --columns-extra: 10px;             /* 额外宽度补偿调小避免溢出，应与 JS COLUMNS_EXTRA 保持一致 */
-  --col-min-width: 30px;             /* 列宽最小值 */
-  --col-max-width: 10000px;          /* 列宽最大值 */
+  --row-height: 24px; /* 与虚拟列表 rowHeight 同步 */
+  --col-gap: 12px; /* 列之间的间隙 */
+  --columns-extra: 10px; /* 额外宽度补偿调小避免溢出，应与 JS COLUMNS_EXTRA 保持一致 */
+  --col-min-width: 30px; /* 列宽最小值 */
+  --col-max-width: 10000px; /* 列宽最大值 */
   --container-padding: 10px;
-  --virtual-scrollbar-width: 18px;   /* 虚拟滚动条宽度 */
+  --virtual-scrollbar-width: 18px; /* 虚拟滚动条宽度 */
   --virtual-scrollbar-thumb-min: 24px; /* JS/CSS 统一的 thumb 最小高度（可覆盖） */
   /* Horizontal padding for header & data cells */
   --cell-hpad: 0.4rem;
@@ -166,8 +168,11 @@ main,
   background-color: transparent;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease,
-    border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
   user-select: none;
 }
 
@@ -213,7 +218,7 @@ main,
 }
 
 /* Inputs and buttons (used in search area) */
-input:not([type="checkbox"]),
+input:not([type='checkbox']),
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -235,7 +240,7 @@ button {
   user-select: text;
 }
 
-input:not([type="checkbox"]) {
+input:not([type='checkbox']) {
   /* 输入框恢复文本光标 */
   cursor: text;
 }
@@ -264,13 +269,8 @@ button:active {
   min-height: 0; /* 允许内部内容正确收缩，防止撑开 grid 行 */
   /* 允许内部绝对定位竖直滚动条 */
   --columns-total: calc(
-    var(--w-filename)
-    + var(--w-path)
-    + var(--w-size)
-    + var(--w-modified)
-    + var(--w-created)
-    + (4 * var(--col-gap))
-    + var(--columns-extra)
+    var(--w-filename) + var(--w-path) + var(--w-size) + var(--w-modified) + var(--w-created) +
+      (4 * var(--col-gap)) + var(--columns-extra)
   );
 }
 
@@ -284,11 +284,12 @@ button:active {
   padding: 0 0 0 var(--container-padding);
 }
 
-
 /* === Columns (Grid) === */
 .columns {
   display: grid;
-  grid-template-columns: var(--w-filename) var(--w-path) var(--w-size) var(--w-modified) var(--w-created);
+  grid-template-columns: var(--w-filename) var(--w-path) var(--w-size) var(--w-modified) var(
+      --w-created
+    );
   column-gap: var(--col-gap);
   align-items: center;
   /* Mirror previous JS total width: 3 gaps * 12px + horizontal padding (10px left + 10px right) */
@@ -347,7 +348,7 @@ button:active {
 }
 
 .col-resizer::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 50%;
   top: 15%;
@@ -358,7 +359,10 @@ button:active {
   background-color: var(--color-resizer);
   /* resizer line color */
   opacity: 0.95;
-  transition: background-color 0.15s ease, width 0.1s ease, opacity 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    width 0.1s ease,
+    opacity 0.15s ease;
 }
 
 .col-resizer:hover::before {
@@ -371,7 +375,7 @@ button:active {
 .virtual-list {
   height: 100%;
   flex: 1;
-  overflow: hidden;   /* 外层隐藏溢出 */
+  overflow: hidden; /* 外层隐藏溢出 */
   position: relative; /* 允许内部绝对定位 */
   width: 100%;
 }
@@ -424,15 +428,24 @@ button:active {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: scale(.98); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (prefers-color-scheme: dark) {
-  .empty-icon { color: var(--color-resizer); }
-  .empty-title { color: var(--color-text); }
+  .empty-icon {
+    color: var(--color-resizer);
+  }
+  .empty-title {
+    color: var(--color-text);
+  }
 }
-
 
 /* Rows (rendered inside virtual list) */
 /* === Rows & Cells === */
@@ -518,7 +531,6 @@ button:active {
   opacity: 0.6;
 }
 
-
 .search-error {
   background-color: #f8d7da;
   color: #721c24;
@@ -548,8 +560,12 @@ button:active {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* === Dark Mode === */
@@ -587,15 +603,17 @@ button:active {
 
   /* 暗色模式下的虚拟滚动条 (Safari 风格) */
   .virtual-scrollbar-thumb {
-    background: rgba(255,255,255,0.35);
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5);
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 1px 2px rgba(0, 0, 0, 0.5);
   }
   .virtual-scrollbar-track:hover .virtual-scrollbar-thumb,
   .virtual-scrollbar-track.is-dragging .virtual-scrollbar-thumb {
-    background: rgba(255,255,255,0.55);
+    background: rgba(255, 255, 255, 0.55);
   }
   .virtual-scrollbar-thumb:active {
-    background: rgba(255,255,255,0.75);
+    background: rgba(255, 255, 255, 0.75);
   }
 }
 
@@ -637,15 +655,32 @@ button:active {
   font-weight: bold;
 }
 
-.readiness-indicator.ready { color: #4CAF50; }
-.readiness-indicator.not-ready { color: #FF9800; }
+.readiness-indicator.ready {
+  color: #4caf50;
+}
+.readiness-indicator.not-ready {
+  color: #ff9800;
+}
 
-.status-label { color: var(--color-muted); font-weight: 500; }
-.status-value { color: var(--color-text); font-weight: 600; min-width: 40px; }
+.status-label {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.status-value {
+  color: var(--color-text);
+  font-weight: 600;
+  min-width: 40px;
+}
 
 /* Left group values should be left-aligned; right group will keep values right-aligned */
-.status-left .status-value { text-align: left; min-width: 36px; }
-.status-right .status-value { text-align: right; min-width: 80px; }
+.status-left .status-value {
+  text-align: left;
+  min-width: 36px;
+}
+.status-right .status-value {
+  text-align: right;
+  min-width: 80px;
+}
 
 /* === Merged: ContextMenu.css === */
 .context-menu {
@@ -659,7 +694,11 @@ button:active {
   min-width: 180px;
 }
 
-.context-menu ul { list-style: none; margin: 0; padding: 0; }
+.context-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 .context-menu li {
   padding: 0 12px;
   cursor: pointer;
@@ -668,7 +707,10 @@ button:active {
   height: 24px;
   line-height: 24px;
 }
-.context-menu li:hover { background-color: var(--color-accent); color: #fff; }
+.context-menu li:hover {
+  background-color: var(--color-accent);
+  color: #fff;
+}
 
 .state-display {
   display: flex;
@@ -721,10 +763,17 @@ button:active {
 }
 
 /* === Utilities (extracted from inline JSX styles) === */
-.flex-fill { flex: 1; min-height: 0; }
+.flex-fill {
+  flex: 1;
+  min-height: 0;
+}
 
 /* Virtual list internal positioning */
-.virtual-list-items { position: absolute; left: 0; right: 0; }
+.virtual-list-items {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
 
 /* === Virtual List Styles === */
 .virtual-list {
@@ -746,7 +795,7 @@ button:active {
   user-select: none;
   -webkit-user-select: none;
   contain: layout paint;
-  transition: opacity .25s ease;
+  transition: opacity 0.25s ease;
   opacity: 1; /* 始终可见 */
   pointer-events: auto; /* 始终响应事件 */
 }
@@ -764,22 +813,26 @@ button:active {
   top: 0;
   width: 100%;
   min-height: 24px; /* 不小于行高，易抓取 */
-  background: rgba(0,0,0,0.35);
+  background: rgba(0, 0, 0, 0.35);
   background-clip: padding-box;
   border-radius: 7px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.35);
-  opacity: .9;
-  transition: background .15s ease, opacity .2s ease;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  opacity: 0.9;
+  transition:
+    background 0.15s ease,
+    opacity 0.2s ease;
   cursor: default;
 }
 
 .virtual-scrollbar-track:hover .virtual-scrollbar-thumb,
 .virtual-scrollbar-track.is-dragging .virtual-scrollbar-thumb {
-  background: rgba(0,0,0,0.55);
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .virtual-scrollbar-thumb:active {
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.7);
   transition: none;
 }
 

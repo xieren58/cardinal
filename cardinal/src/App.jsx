@@ -92,12 +92,11 @@ function App() {
     initialFetchCompleted,
     durationMs,
     resultCount,
-    searchError
+    searchError,
   } = state;
   const { colWidths, onResizeStart, autoFitColumns } = useColumnResize();
-  const {
-    menu, showContextMenu, showHeaderContextMenu, closeMenu, getMenuItems
-  } = useContextMenu(autoFitColumns);
+  const { menu, showContextMenu, showHeaderContextMenu, closeMenu, getMenuItems } =
+    useContextMenu(autoFitColumns);
 
   const headerRef = useRef(null);
   const virtualListRef = useRef(null);
@@ -126,8 +125,8 @@ function App() {
           type: 'STATUS_UPDATE',
           payload: {
             scannedFiles: scanned_files,
-            processedEvents: processed_events
-          }
+            processedEvents: processed_events,
+          },
         });
       });
 
@@ -150,101 +149,116 @@ function App() {
     };
   }, []);
 
-  const handleSearch = useCallback(async (overrides = {}) => {
-    const nextSearch = { ...latestSearchRef.current, ...overrides };
-    latestSearchRef.current = nextSearch;
-    const requestVersion = searchVersionRef.current + 1;
-    searchVersionRef.current = requestVersion;
+  const handleSearch = useCallback(
+    async (overrides = {}) => {
+      const nextSearch = { ...latestSearchRef.current, ...overrides };
+      latestSearchRef.current = nextSearch;
+      const requestVersion = searchVersionRef.current + 1;
+      searchVersionRef.current = requestVersion;
 
-    const { query, useRegex: nextUseRegex, caseSensitive: nextCaseSensitive } = nextSearch;
-    const startTs = performance.now();
-    const isInitial = !hasInitialSearchRunRef.current;
-    const trimmedQuery = query.trim();
+      const { query, useRegex: nextUseRegex, caseSensitive: nextCaseSensitive } = nextSearch;
+      const startTs = performance.now();
+      const isInitial = !hasInitialSearchRunRef.current;
+      const trimmedQuery = query.trim();
 
-    dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
+      dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
 
-    if (!isInitial) {
-      cancelTimer(loadingDelayTimerRef);
-      loadingDelayTimerRef.current = setTimeout(() => {
-        dispatch({ type: 'SEARCH_LOADING_DELAY' });
-        loadingDelayTimerRef.current = null;
-      }, 150);
-    }
-
-    try {
-      const searchResults = await invoke('search', {
-        query,
-        options: {
-          useRegex: nextUseRegex,
-          caseInsensitive: !nextCaseSensitive,
-        }
-      });
-
-      if (searchVersionRef.current !== requestVersion) {
-        return;
+      if (!isInitial) {
+        cancelTimer(loadingDelayTimerRef);
+        loadingDelayTimerRef.current = setTimeout(() => {
+          dispatch({ type: 'SEARCH_LOADING_DELAY' });
+          loadingDelayTimerRef.current = null;
+        }, 150);
       }
 
-      cancelTimer(loadingDelayTimerRef);
+      try {
+        const searchResults = await invoke('search', {
+          query,
+          options: {
+            useRegex: nextUseRegex,
+            caseInsensitive: !nextCaseSensitive,
+          },
+        });
 
-      const endTs = performance.now();
-      const duration = endTs - startTs;
-
-      dispatch({
-        type: 'SEARCH_SUCCESS',
-        payload: {
-          results: searchResults,
-          query: trimmedQuery,
-          duration,
-          count: Array.isArray(searchResults) ? searchResults.length : 0
+        if (searchVersionRef.current !== requestVersion) {
+          return;
         }
-      });
-    } catch (error) {
-      console.error('Search failed:', error);
 
-      if (searchVersionRef.current !== requestVersion) {
-        return;
+        cancelTimer(loadingDelayTimerRef);
+
+        const endTs = performance.now();
+        const duration = endTs - startTs;
+
+        dispatch({
+          type: 'SEARCH_SUCCESS',
+          payload: {
+            results: searchResults,
+            query: trimmedQuery,
+            duration,
+            count: Array.isArray(searchResults) ? searchResults.length : 0,
+          },
+        });
+      } catch (error) {
+        console.error('Search failed:', error);
+
+        if (searchVersionRef.current !== requestVersion) {
+          return;
+        }
+
+        cancelTimer(loadingDelayTimerRef);
+
+        const endTs = performance.now();
+        const duration = endTs - startTs;
+
+        dispatch({
+          type: 'SEARCH_FAILURE',
+          payload: {
+            error: error || 'An unknown error occurred.',
+            duration,
+          },
+        });
+      } finally {
+        hasInitialSearchRunRef.current = true;
       }
+    },
+    [dispatch],
+  );
 
+  const onQueryChange = useCallback(
+    (e) => {
+      const inputValue = e.target.value;
+      updateSearchParams({ query: inputValue });
+      cancelTimer(debounceTimerRef);
+      debounceTimerRef.current = setTimeout(() => {
+        handleSearch({ query: inputValue });
+      }, SEARCH_DEBOUNCE_MS);
+    },
+    [handleSearch, updateSearchParams],
+  );
+
+  const onToggleRegex = useCallback(
+    (event) => {
+      const nextValue = event.target.checked;
+      updateSearchParams({ useRegex: nextValue });
+    },
+    [updateSearchParams],
+  );
+
+  const onToggleCaseSensitive = useCallback(
+    (event) => {
+      const nextValue = event.target.checked;
+      updateSearchParams({ caseSensitive: nextValue });
+    },
+    [updateSearchParams],
+  );
+
+  useEffect(
+    () => () => {
+      cancelTimer(debounceTimerRef);
       cancelTimer(loadingDelayTimerRef);
-
-      const endTs = performance.now();
-      const duration = endTs - startTs;
-
-      dispatch({
-        type: 'SEARCH_FAILURE',
-        payload: {
-          error: error || 'An unknown error occurred.',
-          duration
-        }
-      });
-    } finally {
-      hasInitialSearchRunRef.current = true;
-    }
-  }, [dispatch]);
-
-  const onQueryChange = useCallback((e) => {
-    const inputValue = e.target.value;
-    updateSearchParams({ query: inputValue });
-    cancelTimer(debounceTimerRef);
-    debounceTimerRef.current = setTimeout(() => {
-      handleSearch({ query: inputValue });
-    }, SEARCH_DEBOUNCE_MS);
-  }, [handleSearch, updateSearchParams]);
-
-  const onToggleRegex = useCallback((event) => {
-    const nextValue = event.target.checked;
-    updateSearchParams({ useRegex: nextValue });
-  }, [updateSearchParams]);
-
-  const onToggleCaseSensitive = useCallback((event) => {
-    const nextValue = event.target.checked;
-    updateSearchParams({ caseSensitive: nextValue });
-  }, [updateSearchParams]);
-
-  useEffect(() => () => {
-    cancelTimer(debounceTimerRef);
-    cancelTimer(loadingDelayTimerRef);
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!hasInitialSearchRunRef.current) {
@@ -311,38 +325,26 @@ function App() {
             autoCapitalize="off"
           />
           <div className="search-options">
-            <label
-              className="search-option"
-              title="Toggle case-sensitive matching"
-            >
+            <label className="search-option" title="Toggle case-sensitive matching">
               <input
                 type="checkbox"
                 checked={caseSensitive}
                 onChange={onToggleCaseSensitive}
                 aria-label="Toggle case-sensitive matching"
               />
-              <span
-                className="search-option__display"
-                aria-hidden="true"
-              >
+              <span className="search-option__display" aria-hidden="true">
                 Aa
               </span>
               <span className="sr-only">Toggle case-sensitive matching</span>
             </label>
-            <label
-              className="search-option"
-              title="Enable regular expression search"
-            >
+            <label className="search-option" title="Enable regular expression search">
               <input
                 type="checkbox"
                 checked={useRegex}
                 onChange={onToggleRegex}
                 aria-label="Enable regular expression search"
               />
-              <span
-                className="search-option__display"
-                aria-hidden="true"
-              >
+              <span className="search-option__display" aria-hidden="true">
                 .*
               </span>
               <span className="sr-only">Enable regular expression search</span>
@@ -384,12 +386,7 @@ function App() {
         </div>
       </div>
       {menu.visible && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={getMenuItems()}
-          onClose={closeMenu}
-        />
+        <ContextMenu x={menu.x} y={menu.y} items={getMenuItems()} onClose={closeMenu} />
       )}
       <StatusBar
         scannedFiles={scannedFiles}
