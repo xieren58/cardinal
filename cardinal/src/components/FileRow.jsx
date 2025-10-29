@@ -13,7 +13,14 @@ function deriveHighlightTerm(query) {
   return segments[segments.length - 1].trim();
 }
 
-export const FileRow = memo(function FileRow({ item, rowIndex, style, onContextMenu, searchQuery, caseInsensitive }) {
+export const FileRow = memo(function FileRow({
+  item,
+  rowIndex,
+  style,
+  onContextMenu,
+  searchQuery,
+  caseInsensitive,
+}) {
   const highlightTerm = useMemo(() => deriveHighlightTerm(searchQuery), [searchQuery]);
   if (!item || (typeof item !== 'string' && !item?.path)) {
     return null;
