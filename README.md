@@ -1,49 +1,118 @@
-# PENDING
-- fs-icon 仍差强人意，目前显示的和 finder 仍然不一致，怀疑Finder用的别的预览 API(QLThumbnailGenerator?)
-    + 改成 QLThumbnailGenerator + NSWorkspace 之后仍然和Finder实现不一样，尽力了尽力了
-- 需要在内容没有返回时阻塞滚动条
-    - 标准的 scroll bar 没有实现这个，只能用假 scroll bar 了 https://github.com/yairEO/fakescroll/blob/master/react.fakescroll.js
-    - AI 写半天写不好，先缓缓
-- 搜索结果path中query部分高亮(优化成Rust实现返回matched part)
-    - 不高优
-- metadata 启动后自动 fetching
-    - 目前 metadata replenish 流程不太明朗，先搁置
-- metadata 索引
-    - ctime, mtime, size
-    - 目前 metadata 启动后自动 fetching 流程不太明朗(需要更细粒度的锁)，先搁置
-- Windows/NTFS 支持
-- /Users/0ldm/Library/Caches/Google/Chrome/Default/Cache/Cache_Data 这里面更新太多了
+# Cardinal
 
-# TODO
-- 文件空格预览支持
-- 支持普通搜索，正则搜索, glob search
-    - 不同的格式有开关按钮，类似于 vscode 搜索
-    - 在输入不同的内容的时候自动推断是 glob 还是正则还是普通 substr 搜索，然后对应的按钮变成浅色
-        - 用户可以手动勾选对应的模式按钮，变成深色
-- 搜索结果自动更新
-    - FSEvent 更新之后要重新拉取搜索结果
-- 搜索结果排序
-+ shareded-slab + parking_lot::Mutex(+1 byte，内存体积友好)
-    + 问题在于并行读写的正确处理，如 parent 消失场景
-        + fsevent 改 slab 结构， metadata fetching 只增添 metadata 不改 slab 结构
-+ 加一个页面放 fsevent 列表
-    + 知道文件系统有哪些更新的需求
-+ 加一个页面搜索一个文件夹曾经有过哪些文件
-    + 误删除确认需求
-        - 目前 fsevent 处理慢:
-            - 并行化 fsevent 的fs遍历部分，写数据部分抢锁
-            - 只要有足够快速的 fsevent 处理，我们就可以做到搜索曾经曾经存在过的文件
-            - 好像速度也能接受
-+ 加一个页面渲染文件体积 treemap, 支持钻取（点击文件夹展开子项）。
-    + 磁盘整理需求
-+ 申请 macos 全盘访问权限: https://github.com/ayangweb/tauri-plugin-macos-permissions
-+ 考虑类LSM/WAL设计?
-+ 重启+reopen window之后会很慢
-+ viewport range + icon generation pool
-+ UI 搜索特定文件夹下的文件
-+ 拖动进UI后添加文件路径
+Cardinal 是一套“Rust + Tauri + React”构建的跨平台文件搜索工具链。项目包含一个桌面客户端、命令行/库级索引器以及若干共享组件，目标是在本地磁盘上提供实时、低延迟的搜索体验。
 
+> 如果你刚加入，请先阅读 `doc/AGENTS.md` 获取贡献指南，再回到本文了解整体结构。
+
+---
+
+## 架构速览
+
+```
+cardinal/           → 桌面客户端（Tauri + React）
+cardinal/src-tauri  → Tauri 后端，调用 Rust 搜索核心
+lsf/                → CLI 搜索工具（REPL 模式）
+search-cache/       → 核心索引、查询、事件处理逻辑
+fswalk/             → 文件树遍历器（Rayon 并行）
+cardinal-sdk/       → FSEvent 监听、公共类型
+namepool/, query-segmentation/, fs-icon/ … → 辅助库
+```
+
+Rust 工作区固定在 `nightly-2025-05-09`，格式化规则见根目录 `rustfmt.toml`。
+
+---
+
+## 功能亮点
+
+- **即时搜索**：首轮全量扫描后，借助 FSEvents 增量同步，保持索引新鲜。
+- **虚拟列表渲染**：大规模结果（10k+ 条）也能流畅滚动，详见 `doc/optimizations.md`。
+- **按需加载元数据 / 图标**：前端通过 Tauri 命令拉取节点信息与 QuickLook 图标。
+- **CLI & GUI 共用内核**：`lsf` 与桌面端共享 `search-cache`。
+- **持久化缓存**：退出时写入压缩文件，下次启动快速恢复。
+
+---
+
+## 环境要求
+
+- macOS (当前 FSEvent/图标实现针对 macOS；Windows/Linux 在计划中)
+- Rust nightly `nightly-2025-05-09`
+- Node.js 18+ & npm（用于 React/Tauri 前端）
+- pnpm/yarn 可选（仓库脚本默认使用 npm）
+
+安装依赖：
 ```bash
+rustup toolchain install nightly-2025-05-09
+cd cardinal
+npm install
+```
+
+---
+
+## 快速开始
+
+### 桌面客户端（Tauri）
+```bash
+# 开发模式（推荐）
+cd cardinal
 npm run tauri dev -- --release --features dev
+
+# 预览仅限前端
+npm run dev
+
+# 打包构建
 npm run tauri build
 ```
+
+### 命令行工具（lsf）
+```bash
+cargo build -p lsf
+cargo run -p lsf -- --path $HOME --refresh
+```
+- `--refresh` 强制重建索引；不加时优先读取 `target/cache.zstd`。
+- 运行时输入 `/bye` 退出。
+
+---
+
+## 测试与验证
+
+- **Rust 单元测试**
+  ```bash
+  cargo test --workspace
+  cargo test -p search-cache  # 关注事件处理、路径去重逻辑
+  ```
+- **前端性能测试**：详见 `doc/testing.md`，包含 FPS 测量与性能回归步骤。
+- **优化记录与验证**：`doc/optimizations.md` 汇总历史优化、关键代码模式与指标。
+
+---
+
+## 重要文档导航
+
+| 文档 | 内容 |
+| ----- | ----- |
+| `doc/README.md` | 文档索引（快速定位其他主题） |
+| `doc/AGENTS.md` | 贡献流程 / 代码风格 / PR 要求 |
+| `doc/testing.md` | 性能测试手册与基准场景 |
+| `doc/optimizations.md` | 优化记录、细节与快速参考 |
+| `doc/todo.md` | 优化与架构层面的待办列表 |
+| `doc/cli.md` | CLI 工具（lsf）使用说明 |
+
+---
+
+## 当前重点与待办
+
+- QuickLook 图标缓存与 Viewport 调度优化
+- 搜索结果自动刷新、排序与更丰富的查询模式（正则、Glob、普通）
+- 元数据后台补水与索引扩展（ctime/mtime/size）
+- Windows / NTFS 支持探索
+
+更多细节请查看 `doc/todo.md`。
+
+---
+
+## 支持与反馈
+
+- 提交 Issue 或 PR 前请确保阅读 `doc/AGENTS.md`
+- 性能相关问题请附带 Chrome DevTools 录屏或 `cargo test -p search-cache` 结果
+- 如需要快速了解近期优化，可先查阅 `doc/optimizations.md`
+
+欢迎贡献和反馈，让 Cardinal 更快、更稳、更好用！

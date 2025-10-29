@@ -1,6 +1,6 @@
-# 性能测试指南
+# 测试与性能指南
 
-## 本地测试
+## 前端性能测试
 
 ### 1. 开发模式测试
 
@@ -94,6 +94,26 @@ measureFPS();
 3. 检查是否有闪烁
 ```
 
+## Rust 单元测试
+
+在根目录运行：
+```bash
+cargo test --workspace
+```
+
+重点关注
+```bash
+cargo test -p search-cache
+```
+- 覆盖 FSEvent 处理、路径去重（`scan_paths`）、节点展开等逻辑。
+- 若新增缓存字段（例如路径缓存、图标缓存），请补充对应单元测试。
+
+`lsf` CLI 可通过
+```bash
+cargo test -p lsf
+```
+验证命令行解析与缓存刷新路径。
+
 ## 性能回归测试
 
 ### 检查点
@@ -176,13 +196,4 @@ npm run tauri build
 1. **Chrome DevTools Performance**: 录制运行时性能
 2. **React DevTools Profiler**: 分析组件渲染
 3. **Chrome Memory Profiler**: 检测内存泄漏
-4. **Lighthouse**: 整体性能评分
-5. **why-did-you-render**: 调试不必要的重渲染
-
-## 持续监控
-
-建议设置性能监控：
-- 定期运行性能测试
-- 记录关键指标变化
-- 在 CI 中集成性能测试
-- 性能回归时及时告警
+4. **why-did-you-render**: 调试不必要的重渲染
