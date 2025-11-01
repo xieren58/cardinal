@@ -484,7 +484,7 @@ function App() {
   }, [updateSearchParams]);
 
   // Get the current search input value based on active tab
-  const searchInputValue = activeTab === 'events' ? eventFilterQuery : currentQuery;
+  const searchInputValue = activeTab === 'events' ? eventFilterQuery : searchParams.query;
 
   return (
     <main className="container">
