@@ -440,7 +440,7 @@ function App() {
       return;
     }
 
-    if (!(latestSearchRef.current || '').trim()) {
+    if (!(latestSearchRef.current.query || '').trim()) {
       return;
     }
 
