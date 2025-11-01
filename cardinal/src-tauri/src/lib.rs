@@ -9,13 +9,11 @@ use search_cache::{
     WalkData,
 };
 use serde::{Deserialize, Serialize};
-use parking_lot::RwLock;
 use std::{
     cell::LazyCell,
-    collections::VecDeque,
     path::{Path, PathBuf},
     sync::{
-        Arc, LazyLock, Once,
+        LazyLock, Once,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -72,8 +70,6 @@ struct SearchState {
     node_info_results_rx: Receiver<Vec<SearchResultNode>>,
 
     icon_viewport_tx: Sender<(u64, Vec<SlabIndex>)>,
-
-    recent_events: Arc<RwLock<VecDeque<RecentEvent>>>,
 }
 
 #[tauri::command]
@@ -125,12 +121,10 @@ impl NodeInfoMetadata {
     }
 }
 
-const RECENT_EVENTS_CAP: usize = 10_000;
-
 fn unix_timestamp_now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|dur| dur.as_secs() as i64)
+        .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
 }
 
@@ -141,8 +135,8 @@ struct EventSnapshot {
     timestamp: i64,
 }
 
-fn append_recent_events(
-    recent_events: &Arc<RwLock<VecDeque<RecentEvent>>>,
+// Forward new events to frontend without storing them in Rust
+fn forward_new_events(
     app_handle: &tauri::AppHandle,
     snapshots: &[EventSnapshot],
 ) {
@@ -150,7 +144,7 @@ fn append_recent_events(
         return;
     }
 
-    let mut new_events: Vec<RecentEvent> = snapshots
+    let new_events: Vec<RecentEvent> = snapshots
         .iter()
         .map(|event| RecentEvent {
             path: event.path.to_string_lossy().into_owned(),
@@ -160,18 +154,8 @@ fn append_recent_events(
         })
         .collect();
 
-    new_events.sort_unstable_by(|a, b| b.event_id.cmp(&a.event_id));
-
-    let mut store = recent_events.write();
-    for event in &new_events {
-        while store.len() + 1 > RECENT_EVENTS_CAP {
-            store.pop_back();
-        }
-        store.push_front(event.clone());
-    }
-    let total_count = store.len();
-
-    let _ = app_handle.emit("fs_events_appended", total_count);
+    // Emit new events to frontend - frontend will maintain the list
+    let _ = app_handle.emit("fs_events_batch", new_events);
 }
 
 #[derive(Serialize, Clone)]
@@ -208,7 +192,6 @@ fn run_background_event_loop<F>(
     node_info_results_tx: Sender<Vec<SearchResultNode>>,
     icon_viewport_rx: Receiver<(u64, Vec<SlabIndex>)>,
     icon_update_tx: Sender<IconPayload>,
-    recent_events: Arc<RwLock<VecDeque<RecentEvent>>>,
     watch_root: &str,
     fse_latency_secs: f64,
 ) where
@@ -302,7 +285,7 @@ fn run_background_event_loop<F>(
                 }
 
                 if history_ready && !snapshots.is_empty() {
-                    append_recent_events(&recent_events, app_handle, &snapshots);
+                    forward_new_events(app_handle, &snapshots);
                 }
             }
         }
@@ -350,40 +333,6 @@ async fn get_nodes_info(
         .collect();
 
     Ok(node_infos)
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RecentEventsPage {
-    total: usize,
-    events: Vec<RecentEvent>,
-}
-
-#[tauri::command]
-async fn get_recent_events_range(
-    start: usize,
-    count: usize,
-    state: State<'_, SearchState>,
-) -> Result<RecentEventsPage, String> {
-    let guard = state.recent_events.read();
-
-    let total = guard.len();
-    if count == 0 || start >= total {
-        return Ok(RecentEventsPage {
-            total,
-            events: Vec::new(),
-        });
-    }
-
-    let end = (start + count).min(total);
-    let events = guard
-        .iter()
-        .skip(start)
-        .take(end - start)
-        .cloned()
-        .collect();
-
-    Ok(RecentEventsPage { total, events })
 }
 
 #[tauri::command]
@@ -457,7 +406,6 @@ pub fn run() -> Result<()> {
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
     let (icon_viewport_tx, icon_viewport_rx) = unbounded::<(u64, Vec<SlabIndex>)>();
     let (icon_update_tx, icon_update_rx) = unbounded::<IconPayload>();
-    let recent_events = Arc::new(RwLock::new(VecDeque::with_capacity(RECENT_EVENTS_CAP)));
 
     // 运行Tauri应用
     let app = tauri::Builder::default()
@@ -468,12 +416,10 @@ pub fn run() -> Result<()> {
             node_info_tx,
             node_info_results_rx,
             icon_viewport_tx: icon_viewport_tx.clone(),
-            recent_events: recent_events.clone(),
         })
         .invoke_handler(tauri::generate_handler![
             search,
             get_nodes_info,
-            get_recent_events_range,
             update_icon_viewport,
             open_in_finder
         ])
@@ -496,7 +442,6 @@ pub fn run() -> Result<()> {
             info!("icon update thread exited");
         });
         // Init background event processing thread
-        let recent_events_for_thread = recent_events.clone();
         s.spawn(move || {
             const WATCH_ROOT: &str = "/";
             const FSE_LATENCY_SECS: f64 = 0.1;
@@ -610,7 +555,6 @@ pub fn run() -> Result<()> {
                 node_info_results_tx,
                 icon_viewport_rx,
                 icon_update_tx,
-                recent_events_for_thread,
                 WATCH_ROOT,
                 FSE_LATENCY_SECS,
             );

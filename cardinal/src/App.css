@@ -288,162 +288,94 @@ button:active {
   flex: 1;
   min-height: 0;
   display: flex;
-  padding: 0 var(--container-padding) var(--container-padding);
+  flex-direction: column;
+  padding: 0 0 var(--container-padding) 0;
 }
 
-.events-panel {
+.events-panel-wrapper {
   flex: 1;
   min-height: 0;
   display: flex;
-  position: relative;
-  background: var(--row-even);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.events-surface {
-  flex: 1;
-  display: flex;
   flex-direction: column;
-}
-
-.events-header {
-  display: flex;
-  align-items: center;
-  background: inherit;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--color-header);
-}
-
-.events-header__cell {
-  padding: 0 var(--cell-hpad);
-  display: flex;
-  align-items: center;
+  background: var(--row-even);
   overflow: hidden;
+  padding: 0 0 0 var(--container-padding);
+}
+
+/* ReactVirtualized List container */
+.events-list {
+  outline: none !important;
+}
+
+.events-list .ReactVirtualized__List__innerScrollContainer {
+  /* Ensure rows have the correct width */
+  min-width: var(--columns-events-total);
+}
+
+/* Events grid layout - similar to files grid */
+.columns-events {
+  display: grid;
+  grid-template-columns: var(--w-event-name) var(--w-event-path) var(--w-event-time);
+  column-gap: var(--col-gap);
+  align-items: center;
+  width: var(--columns-events-total);
+  min-width: var(--columns-events-total);
+}
+
+.event-name-column,
+.event-path-text,
+.event-time-column {
+  padding: 0 var(--cell-hpad);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.event-name-column {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.event-name-text {
+  font-weight: 600;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.events-grid {
-  flex: 1;
-  position: relative;
+.event-path-text {
+  color: var(--color-muted);
+  font-size: 0.95em;
 }
 
-.events-grid .ReactVirtualized__Grid {
-  outline: none;
-}
-
-.events-grid .ReactVirtualized__Grid__innerScrollContainer {
-  background: transparent;
-}
-
-.events-cell {
-  display: flex;
-  align-items: center;
-  padding: 0 var(--cell-hpad);
-  font-size: 13px;
-  color: var(--color-text);
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-.events-cell.is-even {
-  background: var(--row-even);
-}
-
-.events-cell.is-odd {
-  background: var(--row-odd);
-}
-
-.events-cell:hover {
-  background: var(--row-hover);
-}
-
-.events-cell.is-loading {
-  color: rgba(100, 116, 139, 0.7);
-  font-style: italic;
-}
-
-.events-cell__loading {
-  font-size: 12px;
-  color: inherit;
-}
-
-.events-cell__name,
-.events-cell__path,
-.events-cell__time {
+.event-time-column {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
 }
 
-.events-cell__primary {
-  font-weight: 600;
+.event-time-primary {
+  font-size: 0.95em;
   line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.events-cell__secondary {
-  font-size: 12px;
+.event-time-secondary {
+  font-size: 0.85em;
   color: var(--color-muted);
   line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.events-cell__time {
-  align-items: flex-start;
-}
-
-.events-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+.events-loading {
   color: var(--color-muted);
-  text-align: center;
-  pointer-events: none;
+  font-style: italic;
+  font-size: 0.9em;
 }
 
-.events-empty__hint {
-  font-size: 12px;
-  color: var(--color-muted);
-}
-
-@media (prefers-color-scheme: dark) {
-  .events-panel {
-    background: var(--row-even);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-
-  .events-header {
-    background: inherit;
-    border-bottom-color: rgba(255, 255, 255, 0.08);
-    color: var(--color-header);
-  }
-
-  .events-cell {
-    color: var(--color-text);
-  }
-
-  .events-cell.is-loading {
-    color: rgba(148, 163, 184, 0.7);
-  }
-
-  .events-cell__secondary {
-    color: var(--color-muted);
-  }
+.event-name-header,
+.event-path-header,
+.event-time-header {
+  padding: 0 var(--cell-hpad);
 }
 
 /* === Columns (Grid) === */
@@ -543,7 +475,8 @@ button:active {
 }
 
 /* === Empty State === */
-.empty-state {
+.empty-state,
+.events-empty {
   position: absolute;
   inset: 0;
   display: flex;
@@ -555,6 +488,11 @@ button:active {
   text-align: center;
   pointer-events: none;
   animation: fadeIn 0.25s ease;
+}
+
+.events-empty__hint {
+  font-size: 12px;
+  color: var(--color-muted);
 }
 
 .empty-icon {
@@ -781,7 +719,7 @@ button:active {
 
 /* === Merged: StatusBar.css === */
 .status-bar {
-  height: 24px;
+  height: 30px;
   background: var(--color-elevated-bg);
   border-top: 1px solid var(--color-border);
   display: flex;
@@ -813,11 +751,24 @@ button:active {
 .status-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
+  gap: 3px;
+  padding: 3px 3px;
   border-radius: 999px;
   background: rgba(230, 232, 236, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  position: relative;
+}
+
+.status-tabs-slider {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border: 0px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .status-tab {
@@ -825,6 +776,7 @@ button:active {
   align-items: center;
   gap: 6px;
   padding: 3px 12px;
+  height: 16px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -833,11 +785,14 @@ button:active {
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition: color 160ms ease;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  justify-content: center;
 }
 
 .status-tab:hover {
-  background-color: rgba(0, 0, 0, 0.08);
   color: rgba(33, 37, 41, 0.92);
 }
 
@@ -848,9 +803,7 @@ button:active {
 }
 
 .status-tab.is-active {
-  background-color: rgba(255, 255, 255, 0.92);
   color: rgba(33, 37, 41, 0.98);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 .status-tab__label,
@@ -868,15 +821,6 @@ button:active {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: inherit;
-  line-height: 1;
-}
-
-.status-tab__label {
-  line-height: 1;
-}
-
- .status-tab__label {
-  line-height: 1;
 }
 
 .status-tab[data-tone='files'] .status-tab__value {
@@ -905,18 +849,20 @@ button:active {
     border: 1px solid rgba(255, 255, 255, 0.06);
   }
 
+  .status-tabs-slider {
+    background-color: rgba(60, 70, 85, 0.55);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+
   .status-tab {
     color: rgba(226, 232, 240, 0.72);
   }
 
   .status-tab:hover {
     color: rgba(248, 250, 252, 0.95);
-    background-color: rgba(255, 255, 255, 0.12);
   }
 
   .status-tab.is-active {
-    background-color: rgba(60, 70, 85, 0.55);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     color: rgba(248, 250, 252, 0.98);
   }
 

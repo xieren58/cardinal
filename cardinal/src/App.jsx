@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useReducer, useState } from 'react';
+import { useRef, useCallback, useEffect, useReducer, useState, useMemo } from 'react';
 import './App.css';
 import { ContextMenu } from './components/ContextMenu';
 import { ColumnHeader } from './components/ColumnHeader';
@@ -21,7 +21,6 @@ const cancelTimer = (timerRef) => {
   }
 };
 
-const INITIAL_EVENTS_FETCH = 200;
 const initialState = {
   results: [],
   isInitialized: false,
@@ -97,20 +96,81 @@ function App() {
     searchError,
   } = state;
   const [activeTab, setActiveTab] = useState('files');
-  const eventsTotalRef = useRef(0);
-  const updateEventsTotal = useCallback((value) => {
-    const normalized = Number.isFinite(value) && value >= 0 ? value : 0;
-    eventsTotalRef.current = normalized;
-    setEventsTotal(normalized);
-  }, []);
+  const [recentEvents, setRecentEvents] = useState([]);
   const { colWidths, onResizeStart, autoFitColumns } = useColumnResize();
-  const { menu, showContextMenu, showHeaderContextMenu, closeMenu, getMenuItems } =
-    useContextMenu(autoFitColumns);
-  const eventsCacheRef = useRef(new Map());
-  const eventsLoadingRef = useRef(new Set());
-  const eventsFetchVersionRef = useRef(0);
-  const [eventsVersion, bumpEventsVersion] = useReducer((v) => v + 1, 0);
-  const [eventsTotal, setEventsTotal] = useState(0);
+  
+  // Files context menu
+  const { 
+    menu: filesMenu, 
+    showContextMenu: showFilesContextMenu, 
+    showHeaderContextMenu: showFilesHeaderContextMenu, 
+    closeMenu: closeFilesMenu, 
+    getMenuItems: getFilesMenuItems 
+  } = useContextMenu(autoFitColumns);
+
+  // Event columns resize state
+  const [eventColWidths, setEventColWidths] = useState(() => {
+    const totalWidth = window.innerWidth - 60;
+    return {
+      name: Math.floor(totalWidth * 0.25),
+      path: Math.floor(totalWidth * 0.50),
+      time: Math.floor(totalWidth * 0.25),
+    };
+  });
+
+  const onEventResizeStart = useCallback(
+    (e, key) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const startX = e.clientX;
+      const startWidth = eventColWidths[key];
+
+      const handleMouseMove = (moveEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const newWidth = Math.max(80, Math.min(800, startWidth + delta));
+        setEventColWidths((prev) => ({ ...prev, [key]: newWidth }));
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    },
+    [eventColWidths],
+  );
+
+  const autoFitEventColumns = useCallback(() => {
+    const totalWidth = window.innerWidth - 60;
+    setEventColWidths({
+      name: Math.floor(totalWidth * 0.25),
+      path: Math.floor(totalWidth * 0.50),
+      time: Math.floor(totalWidth * 0.25),
+    });
+  }, []);
+
+  // Events context menu
+  const { 
+    menu: eventsMenu, 
+    showContextMenu: showEventsContextMenu, 
+    showHeaderContextMenu: showEventsHeaderContextMenu, 
+    closeMenu: closeEventsMenu, 
+    getMenuItems: getEventsMenuItems 
+  } = useContextMenu(autoFitEventColumns);
+
+  // Unified menu interface based on active tab
+  const menu = activeTab === 'events' ? eventsMenu : filesMenu;
+  const showContextMenu = activeTab === 'events' ? showEventsContextMenu : showFilesContextMenu;
+  const showHeaderContextMenu = activeTab === 'events' ? showEventsHeaderContextMenu : showFilesHeaderContextMenu;
+  const closeMenu = activeTab === 'events' ? closeEventsMenu : closeFilesMenu;
+  const getMenuItems = activeTab === 'events' ? getEventsMenuItems : getFilesMenuItems;
 
   const headerRef = useRef(null);
   const virtualListRef = useRef(null);
@@ -126,87 +186,6 @@ function App() {
     return next;
   }, latestSearchRef.current);
   const { useRegex, caseSensitive } = searchParams;
-
-  const resetEventsCache = useCallback(() => {
-    eventsFetchVersionRef.current += 1;
-    eventsCacheRef.current = new Map();
-    eventsLoadingRef.current = new Set();
-    bumpEventsVersion();
-  }, []);
-
-  const fetchEventsRange = useCallback(
-    async (start, count) => {
-      if (count <= 0) return;
-      const requestVersion = eventsFetchVersionRef.current;
-      try {
-        const response = await invoke('get_recent_events_range', { start, count });
-        if (!isMountedRef.current || requestVersion !== eventsFetchVersionRef.current) {
-          return;
-        }
-
-        const total = Number(response?.total ?? eventsTotalRef.current);
-        if (!Number.isNaN(total)) {
-          updateEventsTotal(total);
-        }
-
-        const records = Array.isArray(response?.events) ? response.events : [];
-        if (records.length > 0) {
-          const next = new Map(eventsCacheRef.current);
-          records.forEach((event, idx) => {
-            next.set(start + idx, event);
-          });
-          eventsCacheRef.current = next;
-          bumpEventsVersion();
-        }
-      } catch (error) {
-        if (isMountedRef.current) {
-          console.error('Failed to fetch recent events', error);
-        }
-      }
-    },
-    [updateEventsTotal],
-  );
-
-  const ensureEventsRange = useCallback(
-    async (startIndex, stopIndex) => {
-      const total = eventsTotalRef.current;
-      if (total === 0) return;
-      const start = Math.max(0, startIndex);
-      const end = Math.min(stopIndex, total - 1);
-      if (end < start) return;
-
-      const missing = [];
-      for (let i = start; i <= end; i += 1) {
-        if (!eventsCacheRef.current.has(i) && !eventsLoadingRef.current.has(i)) {
-          missing.push(i);
-        }
-      }
-
-      if (missing.length === 0) return;
-
-      const fetchStart = Math.min(...missing);
-      const fetchEnd = Math.max(...missing) + 1;
-      const count = fetchEnd - fetchStart;
-
-      for (let i = fetchStart; i < fetchStart + count; i += 1) {
-        eventsLoadingRef.current.add(i);
-      }
-
-      try {
-        await fetchEventsRange(fetchStart, count);
-      } finally {
-        for (let i = fetchStart; i < fetchStart + count; i += 1) {
-          eventsLoadingRef.current.delete(i);
-        }
-      }
-    },
-    [fetchEventsRange],
-  );
-
-  const getEventAt = useCallback(
-    (index) => eventsCacheRef.current.get(index) ?? null,
-    [eventsVersion],
-  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -245,24 +224,23 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    fetchEventsRange(0, INITIAL_EVENTS_FETCH);
-  }, [fetchEventsRange]);
-
+  // Listen for new file system events and maintain them in JS
   useEffect(() => {
     let unlistenEvents;
+    const MAX_EVENTS = 10000;
 
     const setupEventsListener = async () => {
       try {
-        unlistenEvents = await listen('fs_events_appended', (event) => {
+        unlistenEvents = await listen('fs_events_batch', (event) => {
           if (!isMountedRef.current) return;
-          const totalCount = Number(event?.payload) || 0;
-          updateEventsTotal(totalCount);
-          resetEventsCache();
-          if (totalCount > 0) {
-            const initialCount = Math.min(totalCount, INITIAL_EVENTS_FETCH);
-            fetchEventsRange(0, initialCount);
-          }
+          const newEvents = Array.isArray(event?.payload) ? event.payload : [];
+          if (newEvents.length === 0) return;
+
+          setRecentEvents((prev) => {
+            // Prepend new events, keep only the most recent MAX_EVENTS
+            const updated = [...newEvents, ...prev];
+            return updated.slice(0, MAX_EVENTS);
+          });
         });
       } catch (error) {
         console.error('Failed to listen for file events', error);
@@ -276,17 +254,7 @@ function App() {
         unlistenEvents();
       }
     };
-  }, [fetchEventsRange, resetEventsCache, updateEventsTotal]);
-
-  useEffect(() => {
-    if (activeTab !== 'events') return;
-    const total = eventsTotalRef.current;
-    if (total === 0) return;
-    const end = Math.min(total - 1, INITIAL_EVENTS_FETCH - 1);
-    if (end >= 0) {
-      ensureEventsRange(0, end);
-    }
-  }, [activeTab, ensureEventsRange, eventsTotal, eventsVersion]);
+  }, []);
 
   const handleSearch = useCallback(
     async (overrides = {}) => {
@@ -460,7 +428,11 @@ function App() {
           <input
             id="search-input"
             onChange={onQueryChange}
-            placeholder="Search for files and folders..."
+            placeholder={
+              activeTab === 'files'
+                ? 'Search for files and folders...'
+                : 'Filter events by path or name...'
+            }
             spellCheck={false}
             autoCorrect="off"
             autoComplete="off"
@@ -502,14 +474,19 @@ function App() {
           ['--w-size']: `${colWidths.size}px`,
           ['--w-modified']: `${colWidths.modified}px`,
           ['--w-created']: `${colWidths.created}px`,
+          ['--w-event-name']: `${eventColWidths.name}px`,
+          ['--w-event-path']: `${eventColWidths.path}px`,
+          ['--w-event-time']: `${eventColWidths.time}px`,
+          ['--columns-events-total']: `${eventColWidths.name + eventColWidths.path + eventColWidths.time + 2 * 12 + 10}px`,
         }}
       >
         {activeTab === 'events' ? (
           <div className="events-view">
             <FSEventsPanel
-              totalCount={eventsTotal}
-              getEvent={getEventAt}
-              ensureRange={ensureEventsRange}
+              events={recentEvents}
+              onResizeStart={onEventResizeStart}
+              onContextMenu={showContextMenu}
+              onHeaderContextMenu={showHeaderContextMenu}
             />
           </div>
         ) : (

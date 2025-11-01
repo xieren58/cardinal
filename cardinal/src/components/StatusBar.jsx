@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef, useLayoutEffect, useState } from 'react';
 
 const TABS = [
   { key: 'files', label: 'Files' },
@@ -14,6 +14,31 @@ const StatusBar = ({
   activeTab = 'files',
   onTabChange,
 }) => {
+  const tabsRef = useRef(null);
+  const filesTabRef = useRef(null);
+  const eventsTabRef = useRef(null);
+  const [sliderStyle, setSliderStyle] = useState({});
+
+  useLayoutEffect(() => {
+    const updateSliderPosition = () => {
+      const activeTabRef = activeTab === 'files' ? filesTabRef : eventsTabRef;
+      if (activeTabRef.current && tabsRef.current) {
+        const tabRect = activeTabRef.current.getBoundingClientRect();
+        const containerRect = tabsRef.current.getBoundingClientRect();
+        
+        setSliderStyle({
+          left: `${tabRect.left - containerRect.left}px`,
+          width: `${tabRect.width}px`,
+        });
+      }
+    };
+
+    updateSliderPosition();
+    // Update on window resize
+    window.addEventListener('resize', updateSliderPosition);
+    return () => window.removeEventListener('resize', updateSliderPosition);
+  }, [activeTab, scannedFiles, processedEvents]);
+
   const handleSelect = useCallback(
     (tabKey) => {
       if (tabKey === activeTab) return;
@@ -40,14 +65,17 @@ const StatusBar = ({
           </span>
           <span className="status-text">{isReady ? 'Ready' : 'Initializing'}</span>
         </div>
-        <div className="status-tabs" role="tablist" aria-label="Search status view">
+        <div ref={tabsRef} className="status-tabs" role="tablist" aria-label="Search status view">
+          <div className="status-tabs-slider" style={sliderStyle} />
           {TABS.map(({ key, label }) => {
             const isActive = activeTab === key;
             const value =
               key === 'files' ? scannedFiles.toLocaleString() : processedEvents.toLocaleString();
+            const ref = key === 'files' ? filesTabRef : eventsTabRef;
             return (
               <button
                 key={key}
+                ref={ref}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
