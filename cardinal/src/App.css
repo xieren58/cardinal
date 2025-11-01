@@ -846,7 +846,7 @@ button:active {
 
   .status-tabs {
     background: rgba(24, 29, 38, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 0px;
   }
 
   .status-tabs-slider {
