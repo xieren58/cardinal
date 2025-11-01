@@ -38,11 +38,10 @@
 
   /* Layout tokens */
   --row-height: 24px; /* 与虚拟列表 rowHeight 同步 */
-  --columns-extra: 10px; /* 额外宽度补偿调小避免溢出，应与 JS COLUMNS_EXTRA 保持一致 */
   --col-min-width: 30px; /* 列宽最小值 */
   --col-max-width: 10000px; /* 列宽最大值 */
   --container-padding: 10px;
-  --virtual-scrollbar-width: 18px; /* 虚拟滚动条宽度 */
+  --virtual-scrollbar-width: 14px; /* 虚拟滚动条宽度，与 JS SCROLLBAR_WIDTH 保持一致 */
   --virtual-scrollbar-thumb-min: 24px; /* JS/CSS 统一的 thumb 最小高度（可覆盖） */
   /* Horizontal padding for header & data cells */
   --cell-hpad: 0.4rem;
@@ -268,8 +267,7 @@ button:active {
   min-height: 0; /* 允许内部内容正确收缩，防止撑开 grid 行 */
   /* 允许内部绝对定位竖直滚动条 */
   --columns-total: calc(
-    var(--w-filename) + var(--w-path) + var(--w-size) + var(--w-modified) + var(--w-created) +
-      var(--columns-extra)
+    var(--w-filename) + var(--w-path) + var(--w-size) + var(--w-modified) + var(--w-created)
   );
 }
 
@@ -372,9 +370,8 @@ button:active {
       --w-created
     );
   align-items: center;
-  /* Mirror previous JS total width without column gaps */
-  width: var(--columns-total);
-  min-width: var(--columns-total);
+  width: var(--columns-total) + var(--virtual-scrollbar-width);
+  min-width: var(--columns-total) + var(--virtual-scrollbar-width);
 }
 
 /* Row and cell styles are moved below header/virtual list for logical order */
@@ -1011,7 +1008,7 @@ button:active {
 
 /* 虚拟滚动条样式 - Safari 原生风格 (始终可见) */
 .virtual-scrollbar {
-  width: 14px; /* 对齐 JS SCROLLBAR_WIDTH */
+  width: var(--virtual-scrollbar-width);
   position: relative;
   flex-shrink: 0;
   padding: 0 3px; /* 形成留白轨道 */

@@ -14,7 +14,6 @@ export const calculateInitialColWidths = (windowWidth) => {
   // 使用常量滚动条宽度（需与 CSS 中的 --virtual-scrollbar-width 保持一致）
   const availableWidth =
     windowWidth -
-    COLUMNS_EXTRA -
     CONTAINER_PADDING -
     SCROLLBAR_WIDTH;
 
@@ -28,11 +27,10 @@ export const calculateInitialColWidths = (windowWidth) => {
   return calculatedWidths;
 };
 
-export const COLUMNS_EXTRA = 10; // 与 CSS --columns-extra 一致，避免多余宽度溢出
 export const ROW_HEIGHT = 24;
 export const CONTAINER_PADDING = 10;
 // 与 CSS 变量 --virtual-scrollbar-width 保持同步
-export const SCROLLBAR_WIDTH = 18;
+export const SCROLLBAR_WIDTH = 14;
 
 // Minimum thumb height for the virtual scrollbar (in px). Keep this in sync with
 // the CSS variable --virtual-scrollbar-thumb-min in src/App.css.
