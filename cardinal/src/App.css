@@ -370,16 +370,14 @@ button:active {
       --w-created
     );
   align-items: center;
-  width: var(--columns-total) + var(--virtual-scrollbar-width);
-  min-width: var(--columns-total) + var(--virtual-scrollbar-width);
+  width: var(--columns-total);
+  min-width: var(--columns-total);
 }
-
-/* Row and cell styles are moved below header/virtual list for logical order */
 
 /* === Header Row === */
 .header-row-container {
   overflow: hidden;
-  /* 完全禁用表头的滚动，只接收来自Grid的滚动位置 */
+  /* 完全禁用表头的滚动，只接收来自 Grid 的滚动位置 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
 }
@@ -393,10 +391,18 @@ button:active {
   top: 0;
   z-index: 1;
   background: inherit;
-  /* 去除左右 10px 以与行 (.row) 宽度对齐，避免列集合总宽度外再加 padding 导致溢出 */
   padding: 6px 0;
   border-bottom: 1px solid var(--color-border);
   font-size: 12px;
+  /* 表头宽度包含滚动条宽度，用于与内容区域（含虚拟滚动条）对齐 */
+  width: calc(var(--columns-total) + var(--virtual-scrollbar-width));
+}
+
+.header-row.columns {
+  /* 表头比内容行多一列，用于填充滚动条位置 */
+  grid-template-columns: var(--w-filename) var(--w-path) var(--w-size) var(--w-modified) var(
+      --w-created
+    ) var(--virtual-scrollbar-width);
 }
 
 .header {
@@ -406,12 +412,17 @@ button:active {
 
 .header-cell {
   position: relative;
-  /* Horizontal padding via variable */
   padding: 0 var(--cell-hpad);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.header-scrollbar-spacer {
+  /* 空白填充单元格，用于对齐虚拟滚动条位置 */
+  width: var(--virtual-scrollbar-width);
+  min-width: var(--virtual-scrollbar-width);
 }
 
 .col-resizer {

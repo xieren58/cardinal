@@ -18,6 +18,8 @@ export const ColumnHeader = forwardRef(({ onResizeStart, onContextMenu }, ref) =
           <span className="col-resizer" onMouseDown={onResizeStart(key)} />
         </span>
       ))}
+      {/* Spacer for scrollbar width alignment */}
+      <span className="header-scrollbar-spacer" />
     </div>
   </div>
 ));
