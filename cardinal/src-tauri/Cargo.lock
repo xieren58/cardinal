@@ -388,6 +388,7 @@ dependencies = [
  "directories",
  "fs-icon",
  "fswalk",
+ "parking_lot",
  "rayon",
  "search-cache",
  "serde",

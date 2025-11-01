@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 
 const TABS = [
   { key: 'files', label: 'Files' },
@@ -11,14 +11,12 @@ const StatusBar = ({
   isReady,
   searchDurationMs,
   resultCount,
+  activeTab = 'files',
   onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState('files');
-
   const handleSelect = useCallback(
     (tabKey) => {
       if (tabKey === activeTab) return;
-      setActiveTab(tabKey);
       if (typeof onTabChange === 'function') {
         onTabChange(tabKey);
       }

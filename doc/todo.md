@@ -76,3 +76,4 @@
 - Windows/NTFS 支持
 - /Users/0ldm/Library/Caches/Google/Chrome/Default/Cache/Cache_Data 这里面更新太多了
 - 搜索结果 full path 是乱序的
+- 空query，切换正则和大小写敏感不要触发重新搜索

@@ -9,14 +9,16 @@ use search_cache::{
     WalkData,
 };
 use serde::{Deserialize, Serialize};
+use parking_lot::RwLock;
 use std::{
     cell::LazyCell,
+    collections::VecDeque,
     path::{Path, PathBuf},
     sync::{
-        LazyLock, Once,
+        Arc, LazyLock, Once,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{Emitter, RunEvent, State};
 use tracing::{info, level_filters::LevelFilter};
@@ -70,6 +72,8 @@ struct SearchState {
     node_info_results_rx: Receiver<Vec<SearchResultNode>>,
 
     icon_viewport_tx: Sender<(u64, Vec<SlabIndex>)>,
+
+    recent_events: Arc<RwLock<VecDeque<RecentEvent>>>,
 }
 
 #[tauri::command]
@@ -121,6 +125,64 @@ impl NodeInfoMetadata {
     }
 }
 
+const RECENT_EVENTS_CAP: usize = 10_000;
+
+fn unix_timestamp_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|dur| dur.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+struct EventSnapshot {
+    path: PathBuf,
+    event_id: u64,
+    flag: EventFlag,
+    timestamp: i64,
+}
+
+fn append_recent_events(
+    recent_events: &Arc<RwLock<VecDeque<RecentEvent>>>,
+    app_handle: &tauri::AppHandle,
+    snapshots: &[EventSnapshot],
+) {
+    if snapshots.is_empty() {
+        return;
+    }
+
+    let mut new_events: Vec<RecentEvent> = snapshots
+        .iter()
+        .map(|event| RecentEvent {
+            path: event.path.to_string_lossy().into_owned(),
+            flag_bits: event.flag.bits(),
+            event_id: event.event_id,
+            timestamp: event.timestamp,
+        })
+        .collect();
+
+    new_events.sort_unstable_by(|a, b| b.event_id.cmp(&a.event_id));
+
+    let mut store = recent_events.write();
+    for event in &new_events {
+        while store.len() + 1 > RECENT_EVENTS_CAP {
+            store.pop_back();
+        }
+        store.push_front(event.clone());
+    }
+    let total_count = store.len();
+
+    let _ = app_handle.emit("fs_events_appended", total_count);
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RecentEvent {
+    path: String,
+    flag_bits: u32,
+    event_id: u64,
+    timestamp: i64,
+}
+
 #[derive(Serialize, Clone)]
 struct StatusBarUpdate {
     scanned_files: usize,
@@ -146,12 +208,14 @@ fn run_background_event_loop<F>(
     node_info_results_tx: Sender<Vec<SearchResultNode>>,
     icon_viewport_rx: Receiver<(u64, Vec<SlabIndex>)>,
     icon_update_tx: Sender<IconPayload>,
+    recent_events: Arc<RwLock<VecDeque<RecentEvent>>>,
     watch_root: &str,
     fse_latency_secs: f64,
 ) where
     F: FnOnce() -> (),
 {
     let mut processed_events = 0usize;
+    let mut history_ready = false;
     loop {
         crossbeam_channel::select! {
             recv(finish_rx) -> tx => {
@@ -213,16 +277,32 @@ fn run_background_event_loop<F>(
                     processed_events
                 }).unwrap();
 
-                // Emit HistoryDone inform frontend that cache is ready.
-                if events.iter().any(|x| x.flag == EventFlag::HistoryDone) {
-                    LazyCell::force(emit_init);
+                let mut snapshots = Vec::with_capacity(events.len());
+                for event in events.iter() {
+                    if event.flag == EventFlag::HistoryDone {
+                        history_ready = true;
+                        LazyCell::force(emit_init);
+                    } else if history_ready {
+                        snapshots.push(EventSnapshot {
+                            path: event.path.clone(),
+                            event_id: event.id,
+                            flag: event.flag,
+                            timestamp: unix_timestamp_now(),
+                        });
+                    }
                 }
-                if let Err(HandleFSEError::Rescan) = cache.handle_fs_events(events) {
+
+                let handle_result = cache.handle_fs_events(events);
+                if let Err(HandleFSEError::Rescan) = handle_result {
                     info!("!!!!!!!!!! Rescan triggered !!!!!!!!");
-                    // Here we clear event_watcher first as rescan may take a lot of time
                     event_watcher.clear();
                     cache.rescan();
                     event_watcher = EventWatcher::spawn(watch_root.to_string(), cache.last_event_id(), fse_latency_secs);
+                    history_ready = false;
+                }
+
+                if history_ready && !snapshots.is_empty() {
+                    append_recent_events(&recent_events, app_handle, &snapshots);
                 }
             }
         }
@@ -266,10 +346,44 @@ async fn get_nodes_info(
                 icon,
                 metadata: metadata.as_ref().map(NodeInfoMetadata::from_metadata),
             }
-    })
+        })
         .collect();
 
     Ok(node_infos)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecentEventsPage {
+    total: usize,
+    events: Vec<RecentEvent>,
+}
+
+#[tauri::command]
+async fn get_recent_events_range(
+    start: usize,
+    count: usize,
+    state: State<'_, SearchState>,
+) -> Result<RecentEventsPage, String> {
+    let guard = state.recent_events.read();
+
+    let total = guard.len();
+    if count == 0 || start >= total {
+        return Ok(RecentEventsPage {
+            total,
+            events: Vec::new(),
+        });
+    }
+
+    let end = (start + count).min(total);
+    let events = guard
+        .iter()
+        .skip(start)
+        .take(end - start)
+        .cloned()
+        .collect();
+
+    Ok(RecentEventsPage { total, events })
 }
 
 #[tauri::command]
@@ -343,6 +457,7 @@ pub fn run() -> Result<()> {
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
     let (icon_viewport_tx, icon_viewport_rx) = unbounded::<(u64, Vec<SlabIndex>)>();
     let (icon_update_tx, icon_update_rx) = unbounded::<IconPayload>();
+    let recent_events = Arc::new(RwLock::new(VecDeque::with_capacity(RECENT_EVENTS_CAP)));
 
     // 运行Tauri应用
     let app = tauri::Builder::default()
@@ -353,10 +468,12 @@ pub fn run() -> Result<()> {
             node_info_tx,
             node_info_results_rx,
             icon_viewport_tx: icon_viewport_tx.clone(),
+            recent_events: recent_events.clone(),
         })
         .invoke_handler(tauri::generate_handler![
             search,
             get_nodes_info,
+            get_recent_events_range,
             update_icon_viewport,
             open_in_finder
         ])
@@ -379,6 +496,7 @@ pub fn run() -> Result<()> {
             info!("icon update thread exited");
         });
         // Init background event processing thread
+        let recent_events_for_thread = recent_events.clone();
         s.spawn(move || {
             const WATCH_ROOT: &str = "/";
             const FSE_LATENCY_SECS: f64 = 0.1;
@@ -492,6 +610,7 @@ pub fn run() -> Result<()> {
                 node_info_results_tx,
                 icon_viewport_rx,
                 icon_update_tx,
+                recent_events_for_thread,
                 WATCH_ROOT,
                 FSE_LATENCY_SECS,
             );

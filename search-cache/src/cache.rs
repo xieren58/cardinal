@@ -392,6 +392,35 @@ impl SearchCache {
         )
     }
 
+    /// Locate the slab index for a path relative to the watch root.
+    pub fn node_index_for_relative_path(&self, relative: &Path) -> Option<SlabIndex> {
+        let mut current = self.slab_root;
+        if relative.as_os_str().is_empty() {
+            return Some(current);
+        }
+        for segment in relative.components().map(|component| component.as_os_str()) {
+            let next = self.slab[current]
+                .children
+                .iter()
+                .find_map(|&child| {
+                    let name = self.slab[child].name_and_parent.as_str();
+                    if OsStr::new(name) == segment {
+                        Some(child)
+                    } else {
+                        None
+                    }
+                })?;
+            current = next;
+        }
+        Some(current)
+    }
+
+    /// Locate the slab index for an absolute path when it belongs to the watch root.
+    pub fn node_index_for_raw_path(&self, raw_path: &Path) -> Option<SlabIndex> {
+        let relative = raw_path.strip_prefix(&self.path).ok()?;
+        self.node_index_for_relative_path(relative)
+    }
+
     fn push_node(&mut self, node: SlabNode) -> SlabIndex {
         let node_name = node.name_and_parent;
         let index = self.slab.insert(node);

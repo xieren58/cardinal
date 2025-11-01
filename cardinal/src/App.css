@@ -284,6 +284,168 @@ button:active {
   padding: 0 0 0 var(--container-padding);
 }
 
+.events-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 0 var(--container-padding) var(--container-padding);
+}
+
+.events-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  background: var(--row-even);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.events-surface {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.events-header {
+  display: flex;
+  align-items: center;
+  background: inherit;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--color-header);
+}
+
+.events-header__cell {
+  padding: 0 var(--cell-hpad);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.events-grid {
+  flex: 1;
+  position: relative;
+}
+
+.events-grid .ReactVirtualized__Grid {
+  outline: none;
+}
+
+.events-grid .ReactVirtualized__Grid__innerScrollContainer {
+  background: transparent;
+}
+
+.events-cell {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--cell-hpad);
+  font-size: 13px;
+  color: var(--color-text);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.events-cell.is-even {
+  background: var(--row-even);
+}
+
+.events-cell.is-odd {
+  background: var(--row-odd);
+}
+
+.events-cell:hover {
+  background: var(--row-hover);
+}
+
+.events-cell.is-loading {
+  color: rgba(100, 116, 139, 0.7);
+  font-style: italic;
+}
+
+.events-cell__loading {
+  font-size: 12px;
+  color: inherit;
+}
+
+.events-cell__name,
+.events-cell__path,
+.events-cell__time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.events-cell__primary {
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.events-cell__secondary {
+  font-size: 12px;
+  color: var(--color-muted);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.events-cell__time {
+  align-items: flex-start;
+}
+
+.events-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+.events-empty__hint {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  .events-panel {
+    background: var(--row-even);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .events-header {
+    background: inherit;
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+    color: var(--color-header);
+  }
+
+  .events-cell {
+    color: var(--color-text);
+  }
+
+  .events-cell.is-loading {
+    color: rgba(148, 163, 184, 0.7);
+  }
+
+  .events-cell__secondary {
+    color: var(--color-muted);
+  }
+}
+
 /* === Columns (Grid) === */
 .columns {
   display: grid;

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useReducer } from 'react';
+import { useRef, useCallback, useEffect, useReducer, useState } from 'react';
 import './App.css';
 import { ContextMenu } from './components/ContextMenu';
 import { ColumnHeader } from './components/ColumnHeader';
@@ -9,6 +9,7 @@ import { useContextMenu } from './hooks/useContextMenu';
 import { ROW_HEIGHT, OVERSCAN_ROW_COUNT, SEARCH_DEBOUNCE_MS } from './constants';
 import { VirtualList } from './components/VirtualList';
 import { StateDisplay } from './components/StateDisplay';
+import FSEventsPanel from './components/FSEventsPanel';
 import { usePreventRefresh } from './hooks/usePreventRefresh';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, once } from '@tauri-apps/api/event';
@@ -20,6 +21,7 @@ const cancelTimer = (timerRef) => {
   }
 };
 
+const INITIAL_EVENTS_FETCH = 200;
 const initialState = {
   results: [],
   isInitialized: false,
@@ -94,12 +96,25 @@ function App() {
     resultCount,
     searchError,
   } = state;
+  const [activeTab, setActiveTab] = useState('files');
+  const eventsTotalRef = useRef(0);
+  const updateEventsTotal = useCallback((value) => {
+    const normalized = Number.isFinite(value) && value >= 0 ? value : 0;
+    eventsTotalRef.current = normalized;
+    setEventsTotal(normalized);
+  }, []);
   const { colWidths, onResizeStart, autoFitColumns } = useColumnResize();
   const { menu, showContextMenu, showHeaderContextMenu, closeMenu, getMenuItems } =
     useContextMenu(autoFitColumns);
+  const eventsCacheRef = useRef(new Map());
+  const eventsLoadingRef = useRef(new Set());
+  const eventsFetchVersionRef = useRef(0);
+  const [eventsVersion, bumpEventsVersion] = useReducer((v) => v + 1, 0);
+  const [eventsTotal, setEventsTotal] = useState(0);
 
   const headerRef = useRef(null);
   const virtualListRef = useRef(null);
+  const isMountedRef = useRef(false);
   const debounceTimerRef = useRef(null);
   const loadingDelayTimerRef = useRef(null);
   const hasInitialSearchRunRef = useRef(false);
@@ -112,14 +127,95 @@ function App() {
   }, latestSearchRef.current);
   const { useRegex, caseSensitive } = searchParams;
 
+  const resetEventsCache = useCallback(() => {
+    eventsFetchVersionRef.current += 1;
+    eventsCacheRef.current = new Map();
+    eventsLoadingRef.current = new Set();
+    bumpEventsVersion();
+  }, []);
+
+  const fetchEventsRange = useCallback(
+    async (start, count) => {
+      if (count <= 0) return;
+      const requestVersion = eventsFetchVersionRef.current;
+      try {
+        const response = await invoke('get_recent_events_range', { start, count });
+        if (!isMountedRef.current || requestVersion !== eventsFetchVersionRef.current) {
+          return;
+        }
+
+        const total = Number(response?.total ?? eventsTotalRef.current);
+        if (!Number.isNaN(total)) {
+          updateEventsTotal(total);
+        }
+
+        const records = Array.isArray(response?.events) ? response.events : [];
+        if (records.length > 0) {
+          const next = new Map(eventsCacheRef.current);
+          records.forEach((event, idx) => {
+            next.set(start + idx, event);
+          });
+          eventsCacheRef.current = next;
+          bumpEventsVersion();
+        }
+      } catch (error) {
+        if (isMountedRef.current) {
+          console.error('Failed to fetch recent events', error);
+        }
+      }
+    },
+    [updateEventsTotal],
+  );
+
+  const ensureEventsRange = useCallback(
+    async (startIndex, stopIndex) => {
+      const total = eventsTotalRef.current;
+      if (total === 0) return;
+      const start = Math.max(0, startIndex);
+      const end = Math.min(stopIndex, total - 1);
+      if (end < start) return;
+
+      const missing = [];
+      for (let i = start; i <= end; i += 1) {
+        if (!eventsCacheRef.current.has(i) && !eventsLoadingRef.current.has(i)) {
+          missing.push(i);
+        }
+      }
+
+      if (missing.length === 0) return;
+
+      const fetchStart = Math.min(...missing);
+      const fetchEnd = Math.max(...missing) + 1;
+      const count = fetchEnd - fetchStart;
+
+      for (let i = fetchStart; i < fetchStart + count; i += 1) {
+        eventsLoadingRef.current.add(i);
+      }
+
+      try {
+        await fetchEventsRange(fetchStart, count);
+      } finally {
+        for (let i = fetchStart; i < fetchStart + count; i += 1) {
+          eventsLoadingRef.current.delete(i);
+        }
+      }
+    },
+    [fetchEventsRange],
+  );
+
+  const getEventAt = useCallback(
+    (index) => eventsCacheRef.current.get(index) ?? null,
+    [eventsVersion],
+  );
+
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
     let unlistenStatus;
     let unlistenInit;
 
     const setupListeners = async () => {
       unlistenStatus = await listen('status_bar_update', (event) => {
-        if (!isMounted) return;
+        if (!isMountedRef.current) return;
         const { scanned_files, processed_events } = event.payload;
         dispatch({
           type: 'STATUS_UPDATE',
@@ -131,7 +227,7 @@ function App() {
       });
 
       unlistenInit = await once('init_completed', () => {
-        if (!isMounted) return;
+        if (!isMountedRef.current) return;
         dispatch({ type: 'INIT_COMPLETED' });
       });
     };
@@ -139,7 +235,7 @@ function App() {
     setupListeners();
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       if (typeof unlistenStatus === 'function') {
         unlistenStatus();
       }
@@ -148,6 +244,49 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    fetchEventsRange(0, INITIAL_EVENTS_FETCH);
+  }, [fetchEventsRange]);
+
+  useEffect(() => {
+    let unlistenEvents;
+
+    const setupEventsListener = async () => {
+      try {
+        unlistenEvents = await listen('fs_events_appended', (event) => {
+          if (!isMountedRef.current) return;
+          const totalCount = Number(event?.payload) || 0;
+          updateEventsTotal(totalCount);
+          resetEventsCache();
+          if (totalCount > 0) {
+            const initialCount = Math.min(totalCount, INITIAL_EVENTS_FETCH);
+            fetchEventsRange(0, initialCount);
+          }
+        });
+      } catch (error) {
+        console.error('Failed to listen for file events', error);
+      }
+    };
+
+    setupEventsListener();
+
+    return () => {
+      if (typeof unlistenEvents === 'function') {
+        unlistenEvents();
+      }
+    };
+  }, [fetchEventsRange, resetEventsCache, updateEventsTotal]);
+
+  useEffect(() => {
+    if (activeTab !== 'events') return;
+    const total = eventsTotalRef.current;
+    if (total === 0) return;
+    const end = Math.min(total - 1, INITIAL_EVENTS_FETCH - 1);
+    if (end >= 0) {
+      ensureEventsRange(0, end);
+    }
+  }, [activeTab, ensureEventsRange, eventsTotal, eventsVersion]);
 
   const handleSearch = useCallback(
     async (overrides = {}) => {
@@ -365,28 +504,38 @@ function App() {
           ['--w-created']: `${colWidths.created}px`,
         }}
       >
-        <div className="scroll-area">
-          <ColumnHeader
-            ref={headerRef}
-            onResizeStart={onResizeStart}
-            onContextMenu={showHeaderContextMenu}
-          />
-          <div className="flex-fill">
-            {displayState !== 'results' ? (
-              <StateDisplay state={displayState} message={searchError} query={currentQuery} />
-            ) : (
-              <VirtualList
-                ref={virtualListRef}
-                results={results}
-                rowHeight={ROW_HEIGHT}
-                overscan={OVERSCAN_ROW_COUNT}
-                renderRow={renderRow}
-                onScrollSync={handleHorizontalSync}
-                className="virtual-list"
-              />
-            )}
+        {activeTab === 'events' ? (
+          <div className="events-view">
+            <FSEventsPanel
+              totalCount={eventsTotal}
+              getEvent={getEventAt}
+              ensureRange={ensureEventsRange}
+            />
           </div>
-        </div>
+        ) : (
+          <div className="scroll-area">
+            <ColumnHeader
+              ref={headerRef}
+              onResizeStart={onResizeStart}
+              onContextMenu={showHeaderContextMenu}
+            />
+            <div className="flex-fill">
+              {displayState !== 'results' ? (
+                <StateDisplay state={displayState} message={searchError} query={currentQuery} />
+              ) : (
+                <VirtualList
+                  ref={virtualListRef}
+                  results={results}
+                  rowHeight={ROW_HEIGHT}
+                  overscan={OVERSCAN_ROW_COUNT}
+                  renderRow={renderRow}
+                  onScrollSync={handleHorizontalSync}
+                  className="virtual-list"
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {menu.visible && (
         <ContextMenu x={menu.x} y={menu.y} items={getMenuItems()} onClose={closeMenu} />
@@ -397,6 +546,8 @@ function App() {
         isReady={isInitialized}
         searchDurationMs={durationMs}
         resultCount={resultCount}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
     </main>
   );
