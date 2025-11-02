@@ -5,7 +5,6 @@
   <p>
     <a href="#requirements">Requirements</a> ·
     <a href="#running-cardinal">Running Cardinal</a> ·
-    <a href="#contributing">Contributing</a>
   </p>
   <img src="doc/UI.gif" alt="Cardinal UI preview" width="720">
 </div>
@@ -36,23 +35,6 @@ npm run tauri dev -- --release --features dev
 cd cardinal
 npm run tauri build
 ```
-
----
-
-## Contributing
-
-We welcome issues, feature requests, and PRs. Start with:
-
-- [CONTRIBUTING.md](./CONTRIBUTING.md) for workflow expectations
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for community guidelines
-
-When filing issues, include platform details and reproduction steps. For performance regressions, attach profiler traces or screen recordings if possible.
-
----
-
-## License
-
-Cardinal is released under the [MIT License](./LICENSE).
 
 ---
 
