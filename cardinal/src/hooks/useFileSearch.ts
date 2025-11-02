@@ -2,6 +2,7 @@ import { useReducer, useRef, useCallback, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { SEARCH_DEBOUNCE_MS } from '../constants';
+import type { AppLifecycleStatus } from '../types/ipc';
 import type { SlabIndex } from '../types/slab';
 import { toSlabIndexArray } from '../types/slab';
 
@@ -9,7 +10,6 @@ type SearchError = string | Error | null;
 
 type SearchState = {
   results: SlabIndex[];
-  isInitialized: boolean;
   scannedFiles: number;
   processedEvents: number;
   currentQuery: string;
@@ -18,6 +18,7 @@ type SearchState = {
   durationMs: number | null;
   resultCount: number;
   searchError: SearchError;
+  lifecycleState: AppLifecycleStatus;
 };
 
 type SearchParams = {
@@ -28,7 +29,6 @@ type SearchParams = {
 
 type SearchAction =
   | { type: 'STATUS_UPDATE'; payload: { scannedFiles: number; processedEvents: number } }
-  | { type: 'INIT_COMPLETED' }
   | { type: 'SEARCH_REQUEST'; payload: { immediate: boolean } }
   | { type: 'SEARCH_LOADING_DELAY' }
   | {
@@ -46,11 +46,11 @@ type SearchAction =
         error: SearchError;
         duration: number;
       };
-    };
+    }
+  | { type: 'SET_LIFECYCLE_STATE'; payload: { status: AppLifecycleStatus } };
 
 const initialSearchState: SearchState = {
   results: [],
-  isInitialized: false,
   scannedFiles: 0,
   processedEvents: 0,
   currentQuery: '',
@@ -59,6 +59,7 @@ const initialSearchState: SearchState = {
   durationMs: null,
   resultCount: 0,
   searchError: null,
+  lifecycleState: 'Initializing',
 };
 
 const initialSearchParams: SearchParams = {
@@ -83,8 +84,6 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         scannedFiles: action.payload.scannedFiles,
         processedEvents: action.payload.processedEvents,
       };
-    case 'INIT_COMPLETED':
-      return { ...state, isInitialized: true };
     case 'SEARCH_REQUEST':
       return {
         ...state,
@@ -116,6 +115,11 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         durationMs: action.payload.duration,
         resultCount: 0,
       };
+    case 'SET_LIFECYCLE_STATE':
+      return {
+        ...state,
+        lifecycleState: action.payload.status,
+      };
     default:
       return state;
   }
@@ -135,7 +139,7 @@ type UseFileSearchResult = {
   resetSearchQuery: () => void;
   cancelPendingSearches: () => void;
   handleStatusUpdate: (scannedFiles: number, processedEvents: number) => void;
-  markInitialized: () => void;
+  setLifecycleState: (status: AppLifecycleStatus) => void;
 };
 
 export function useFileSearch(): UseFileSearchResult {
@@ -160,9 +164,26 @@ export function useFileSearch(): UseFileSearchResult {
     });
   }, []);
 
-  const markInitialized = useCallback(() => {
-    dispatch({ type: 'INIT_COMPLETED' });
+  const setLifecycleState = useCallback((status: AppLifecycleStatus) => {
+    dispatch({ type: 'SET_LIFECYCLE_STATE', payload: { status } });
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await invoke<AppLifecycleStatus>('get_app_status');
+        if (!cancelled) {
+          setLifecycleState(status);
+        }
+      } catch (error) {
+        console.error('Failed to fetch app lifecycle status:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setLifecycleState]);
 
   const cancelPendingSearches = useCallback(() => {
     cancelTimer(debounceTimerRef);
@@ -286,6 +307,6 @@ export function useFileSearch(): UseFileSearchResult {
     resetSearchQuery,
     cancelPendingSearches,
     handleStatusUpdate,
-    markInitialized,
+    setLifecycleState,
   };
 }

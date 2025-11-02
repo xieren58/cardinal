@@ -890,8 +890,11 @@ button:active {
 .readiness-indicator.ready {
   color: #4caf50;
 }
-.readiness-indicator.not-ready {
+.readiness-indicator.initializing {
   color: #ff9800;
+}
+.readiness-indicator.closing {
+  color: #9e9e9e;
 }
 
 .status-label {

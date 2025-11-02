@@ -21,3 +21,5 @@ export type RecentEventPayload = {
   eventId: number;
   timestamp: number;
 };
+
+export type AppLifecycleStatus = 'Initializing' | 'Ready' | 'Closing';

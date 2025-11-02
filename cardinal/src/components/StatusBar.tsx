@@ -1,12 +1,13 @@
 import React, { useCallback, useRef, useLayoutEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import type { AppLifecycleStatus } from '../types/ipc';
 
 export type StatusTabKey = 'files' | 'events';
 
 type StatusBarProps = {
   scannedFiles: number;
   processedEvents: number;
-  isReady: boolean;
+  lifecycleState: AppLifecycleStatus;
   searchDurationMs?: number | null;
   resultCount?: number | null;
   activeTab?: StatusTabKey;
@@ -18,10 +19,16 @@ const TABS: Array<{ key: StatusTabKey; label: string }> = [
   { key: 'events', label: 'Events' },
 ];
 
+const LIFECYCLE_DISPLAY: Record<AppLifecycleStatus, { icon: string; label: string; tone: string }> = {
+  Initializing: { icon: '○', label: 'Initializing', tone: 'initializing' },
+  Ready: { icon: '●', label: 'Ready', tone: 'ready' },
+  Closing: { icon: '●', label: 'Closing', tone: 'closing' },
+};
+
 const StatusBar = ({
   scannedFiles,
   processedEvents,
-  isReady,
+  lifecycleState,
   searchDurationMs,
   resultCount,
   activeTab = 'files',
@@ -68,15 +75,20 @@ const StatusBar = ({
   const durationText =
     typeof searchDurationMs === 'number' ? `${Math.round(searchDurationMs)}ms` : null;
   const searchDisplay = durationText ? `${resultsText} • ${durationText}` : resultsText;
+  const lifecycle = LIFECYCLE_DISPLAY[lifecycleState] ?? LIFECYCLE_DISPLAY.Initializing;
 
   return (
     <div className="status-bar">
       <div className="status-left">
         <div className="status-section">
-          <span className={`readiness-indicator ${isReady ? 'ready' : 'not-ready'}`}>
-            {isReady ? '●' : '○'}
+          <span
+            className={`readiness-indicator ${lifecycle.tone}`}
+            aria-label={`Application status: ${lifecycle.label}`}
+            title={`Application status: ${lifecycle.label}`}
+          >
+            {lifecycle.icon}
           </span>
-          <span className="status-text">{isReady ? 'Ready' : 'Initializing'}</span>
+          <span className="status-text">{lifecycle.label}</span>
         </div>
         <div ref={tabsRef} className="status-tabs" role="tablist" aria-label="Search status view">
           <div className="status-tabs-slider" style={sliderStyle} />

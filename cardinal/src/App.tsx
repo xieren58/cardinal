@@ -7,7 +7,7 @@ import { FileRow } from './components/FileRow';
 import StatusBar from './components/StatusBar';
 import type { StatusTabKey } from './components/StatusBar';
 import type { SearchResultItem } from './types/search';
-import type { StatusBarUpdatePayload } from './types/ipc';
+import type { AppLifecycleStatus, StatusBarUpdatePayload } from './types/ipc';
 import { useColumnResize } from './hooks/useColumnResize';
 import { useContextMenu } from './hooks/useContextMenu';
 import { useFileSearch } from './hooks/useFileSearch';
@@ -19,7 +19,7 @@ import type { VirtualListHandle } from './components/VirtualList';
 import { StateDisplay } from './components/StateDisplay';
 import FSEventsPanel from './components/FSEventsPanel';
 import type { FSEventsPanelHandle } from './components/FSEventsPanel';
-import { listen, once } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
 type ActiveTab = StatusTabKey;
@@ -33,11 +33,10 @@ function App() {
     resetSearchQuery,
     cancelPendingSearches,
     handleStatusUpdate,
-    markInitialized,
+    setLifecycleState,
   } = useFileSearch();
   const {
     results,
-    isInitialized,
     scannedFiles,
     processedEvents,
     currentQuery,
@@ -46,6 +45,7 @@ function App() {
     durationMs,
     resultCount,
     searchError,
+    lifecycleState,
   } = state;
   const [activeTab, setActiveTab] = useState<ActiveTab>('files');
   const eventsPanelRef = useRef<FSEventsPanelHandle | null>(null);
@@ -86,7 +86,7 @@ function App() {
   useEffect(() => {
     isMountedRef.current = true;
     let unlistenStatus: UnlistenFn | undefined;
-    let unlistenInit: UnlistenFn | undefined;
+    let unlistenLifecycle: UnlistenFn | undefined;
 
     const setupListeners = async (): Promise<void> => {
       unlistenStatus = await listen<StatusBarUpdatePayload>('status_bar_update', (event) => {
@@ -97,9 +97,11 @@ function App() {
         handleStatusUpdate(scanned_files, processed_events);
       });
 
-      unlistenInit = await once('init_completed', () => {
+      unlistenLifecycle = await listen<AppLifecycleStatus>('app_lifecycle_state', (event) => {
         if (!isMountedRef.current) return;
-        markInitialized();
+        const status = event.payload;
+        if (!status) return;
+        setLifecycleState(status);
       });
     };
 
@@ -108,9 +110,9 @@ function App() {
     return () => {
       isMountedRef.current = false;
       unlistenStatus?.();
-      unlistenInit?.();
+      unlistenLifecycle?.();
     };
-  }, [handleStatusUpdate, markInitialized]);
+  }, [handleStatusUpdate, setLifecycleState]);
 
   const onQueryChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
@@ -323,7 +325,7 @@ function App() {
       <StatusBar
         scannedFiles={scannedFiles}
         processedEvents={processedEvents}
-        isReady={isInitialized}
+        lifecycleState={lifecycleState}
         searchDurationMs={durationMs}
         resultCount={resultCount}
         activeTab={activeTab}

@@ -10,16 +10,15 @@ use search_cache::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::LazyCell,
     path::{Path, PathBuf},
     sync::{
         LazyLock, Once,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{Emitter, RunEvent, State};
-use tracing::{info, level_filters::LevelFilter};
+use tracing::{error, info, level_filters::LevelFilter};
 use tracing_subscriber::EnvFilter;
 
 static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -32,6 +31,56 @@ static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
         .join("cardinal.db")
 });
 static APP_QUIT: AtomicBool = AtomicBool::new(false);
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppLifecycleState {
+    Initializing = 0,
+    Ready = 1,
+    Closing = 2,
+}
+
+impl AppLifecycleState {
+    fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Ready,
+            2 => Self::Closing,
+            _ => Self::Initializing,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Initializing => "Initializing",
+            Self::Ready => "Ready",
+            Self::Closing => "Closing",
+        }
+    }
+}
+
+static APP_LIFECYCLE_STATE: AtomicU8 = AtomicU8::new(AppLifecycleState::Initializing as u8);
+
+fn load_app_state() -> AppLifecycleState {
+    AppLifecycleState::from_u8(APP_LIFECYCLE_STATE.load(Ordering::Acquire))
+}
+
+fn store_app_state(state: AppLifecycleState) {
+    APP_LIFECYCLE_STATE.store(state as u8, Ordering::Release);
+}
+
+fn emit_app_state(app_handle: &tauri::AppHandle) {
+    if let Err(err) = app_handle.emit("app_lifecycle_state", load_app_state().as_str()) {
+        error!("Failed to emit app_lifecycle_state event: {:?}", err);
+    }
+}
+
+fn update_app_state(app_handle: &tauri::AppHandle, state: AppLifecycleState) {
+    if load_app_state() == state {
+        return;
+    }
+    store_app_state(state);
+    emit_app_state(app_handle);
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -183,9 +232,8 @@ struct IconPayload {
     icon: String,
 }
 
-fn run_background_event_loop<F>(
+fn run_background_event_loop(
     app_handle: &tauri::AppHandle,
-    emit_init: &LazyCell<(), F>,
     mut cache: SearchCache,
     mut event_watcher: EventWatcher,
     finish_rx: Receiver<Sender<Option<SearchCache>>>,
@@ -197,11 +245,9 @@ fn run_background_event_loop<F>(
     icon_update_tx: Sender<IconPayload>,
     watch_root: &str,
     fse_latency_secs: f64,
-) where
-    F: FnOnce() -> (),
-{
+) {
     let mut processed_events = 0usize;
-    let mut history_ready = false;
+    let mut history_ready = matches!(load_app_state(), AppLifecycleState::Ready);
     loop {
         crossbeam_channel::select! {
             recv(finish_rx) -> tx => {
@@ -267,7 +313,7 @@ fn run_background_event_loop<F>(
                 for event in events.iter() {
                     if event.flag == EventFlag::HistoryDone {
                         history_ready = true;
-                        LazyCell::force(emit_init);
+                        update_app_state(app_handle, AppLifecycleState::Ready);
                     } else if history_ready {
                         snapshots.push(EventSnapshot {
                             path: event.path.clone(),
@@ -284,6 +330,7 @@ fn run_background_event_loop<F>(
                     event_watcher.clear();
                     cache.rescan();
                     event_watcher = EventWatcher::spawn(watch_root.to_string(), cache.last_event_id(), fse_latency_secs);
+                    update_app_state(app_handle, AppLifecycleState::Initializing);
                     history_ready = false;
                 }
 
@@ -351,6 +398,11 @@ async fn update_icon_viewport(
 }
 
 #[tauri::command]
+async fn get_app_status() -> Result<String, String> {
+    Ok(load_app_state().as_str().to_string())
+}
+
+#[tauri::command]
 fn open_in_finder(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -409,7 +461,6 @@ pub fn run() -> Result<()> {
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
     let (icon_viewport_tx, icon_viewport_rx) = unbounded::<(u64, Vec<SlabIndex>)>();
     let (icon_update_tx, icon_update_rx) = unbounded::<IconPayload>();
-
     let mut builder = tauri::Builder::default();
     #[cfg(not(feature = "dev"))]
     {
@@ -429,12 +480,14 @@ pub fn run() -> Result<()> {
             search,
             get_nodes_info,
             update_icon_viewport,
+            get_app_status,
             open_in_finder
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
 
     let app_handle = &app.handle().to_owned();
+    emit_app_state(app_handle);
     let icon_update_rx = &icon_update_rx;
     std::thread::scope(move |s| {
         // Init icon update thread
@@ -454,7 +507,6 @@ pub fn run() -> Result<()> {
             const WATCH_ROOT: &str = "/";
             const FSE_LATENCY_SECS: f64 = 0.1;
             let path = PathBuf::from(WATCH_ROOT);
-            let emit_init = LazyCell::new(|| app_handle.emit("init_completed", ()).unwrap());
             // 初始化搜索缓存
             let mut cache = match SearchCache::try_read_persistent_cache(
                 &path,
@@ -539,7 +591,7 @@ pub fn run() -> Result<()> {
                         .unwrap();
 
                     // If full file system scan, emit initialized instantly.
-                    *emit_init;
+                    update_app_state(app_handle, AppLifecycleState::Ready);
                     cache
                 }
             };
@@ -550,10 +602,12 @@ pub fn run() -> Result<()> {
                 cache.last_event_id(),
                 FSE_LATENCY_SECS,
             );
+            if !matches!(load_app_state(), AppLifecycleState::Ready) {
+                update_app_state(app_handle, AppLifecycleState::Initializing);
+            }
             info!("Started background processing thread");
             run_background_event_loop(
                 &app_handle,
-                &emit_init,
                 cache,
                 event_watcher,
                 finish_rx,
@@ -573,6 +627,7 @@ pub fn run() -> Result<()> {
         app.run(move |app_handle, event| {
             match &event {
                 RunEvent::Exit => {
+                    update_app_state(app_handle, AppLifecycleState::Closing);
                     APP_QUIT.store(true, Ordering::Relaxed);
                     // 右键关闭的时候会被调用
                     // TODO(ldm0): 未来这里可以优化成不时保存一下，然后关闭的时候如果10秒内之前存过就不再存了
@@ -587,6 +642,7 @@ pub fn run() -> Result<()> {
                     // This allow us to catch tray icon events when there is no window
                     // if we manually requested an exit (code is Some(_)) we will let it go through
                     if code.is_none() {
+                        update_app_state(app_handle, AppLifecycleState::Closing);
                         APP_QUIT.store(true, Ordering::Relaxed);
                         info!("Tauri application exited, flushing cache...");
 
