@@ -1,28 +1,30 @@
 # Repository Guidelines
 
+> Quick reminder: these notes mirror the public [CONTRIBUTING.md](./CONTRIBUTING.md). Keep both documents in sync when updating workflows or tooling.
+
 ## Project Structure & Module Organization
-- `Cargo.toml` defines a Rust workspace spanning `search-cache/`, `fswalk/`, `cardinal-sdk/`, `fs-icon/`, `namepool/`, `query-segmentation/`, and the CLI entry `lsf/`.
-- `cardinal/` hosts the Tauri + React desktop app; web assets live under `src/` and native glue in `src-tauri/`.
-- Persistent caches and build artifacts stay in `target/` and `cardinal/dist/`; keep them out of commits. Core documentation lives under `doc/`.
+- `cardinal/` hosts the Tauri + React desktop client; UI code sits in `src/`, and native glue lives in `src-tauri/`.
+- The Rust workspace (root `Cargo.toml`) tracks `lsf/` (CLI entry), `cardinal-sdk/` (shared types), `fswalk/` (filesystem traversal), `fs-icon/` (icon extraction), `namepool/`, `query-segmentation/`, and `search-cache/`.
+- Toolchain pinning (`nightly-2025-05-09`) and import grouping rules sit at the repository root. Keep generated artifacts like `target/` and `cardinal/dist/` out of commits.
 
 ## Build, Test, and Development Commands
-- `cargo check --workspace` for a fast validation pass before pushing.
-- `cargo test --workspace` to execute the full Rust suite; target crates with `-p search-cache`.
-- `cargo clippy --workspace --all-targets -D warnings` keeps lint debt out.
-- Front-end flows use `npm run dev` for Vite, `npm run tauri dev -- --release --features dev` for the desktop shell, and `npm run tauri build` when packaging.
+- `cargo check --workspace` validates all Rust crates; run before pushing cross-crate changes.
+- `cargo test --workspace` executes unit and integration suites; narrow scope with `-p <crate>` (e.g., `cargo test -p lsf`).
+- `cargo clippy --workspace --all-targets` surfaces lint issues; address warnings or document allowances.
+- Front-end flows: `cd cardinal && npm run dev` for the Vite server, `npm run tauri dev -- --release --features dev` for the desktop shell, `npm run tauri build` for release binaries, and `npm run build` for the static bundle.
 
 ## Coding Style & Naming Conventions
-- Run `cargo fmt --all` to apply the pinned `rustfmt.toml` (4-space indent, grouped imports). Stick to `snake_case` modules/functions and `PascalCase` types.
-- Prefer explicit module paths to glob imports; use `tracing` instead of `println!` for diagnostics, return `anyhow::Result` in fallible APIs.
-- React components live in `cardinal/src/components` and follow `PascalCase.tsx`; hooks/utilities keep `camelCase` exports inside `kebab-case` directories.
-- Execute `npm run format` prior to committing UI changes; keep CSS variables scoped in `cardinal/src/styles`.
+- Run `cargo fmt --all` to honour repository-wide `rustfmt` settings (grouped crate imports, 4-space indent). Modules, files, and functions stay `snake_case`; types and traits use `PascalCase`.
+- Prefer explicit modules over glob imports; rely on `tracing` for structured logs and return `anyhow::Result` from fallible Rust APIs.
+- React components in `cardinal/src/components` follow `PascalCase.tsx`; hooks and utilities keep `camelCase` exports inside `kebab-case` folders.
+- Use `npm run format` or `npm run format:check` to enforce Prettier defaults before committing UI changes.
 
 ## Testing Guidelines
-- Co-locate Rust unit tests with implementations and reserve `tests/` directories for integration coverage.
-- Run `cargo test --workspace` after touching shared crates, plus targeted cases (`cargo test -p lsf`) for query/indexing changes.
-- Follow `doc/testing.md` for manual UI and performance checks; record FPS captures when tweaking virtualization or icon loading.
+- Place Rust tests alongside the logic they cover; use a crate-level `tests/` folder for cross-cutting scenarios.
+- Run `cargo test --workspace` after touching shared crates, and `cargo test -p lsf` when altering query or indexing code.
+- For UI and performance validation, follow `TESTING.md`: rebuild with `npm run build`, profile in Chrome DevTools/Safari, and capture FPS or memory regressions.
 
 ## Commit & Pull Request Guidelines
-- Follow Conventional Commits (`feat:`, `fix:`, `chore:`). Include crate scopes (`feat(search-cache): ...`) when helpful.
-- Squash exploratory commits before review. Reference related issues, note impacted crates, and attach screenshots or logs for UI and perf work.
-- Document the commands you executed (cargo/npm) in the PR description and call out risk areas around indexing throughput or Tauri packaging.
+- Follow Conventional Commits (`feat:`, `fix:`, `chore:`). Add scopes when useful (`feat(fs-icon): cache lookups`).
+- Squash WIP commits before review. Reference related issues and note impacted crates or UI surfaces.
+- PRs should report the `cargo`/`npm` commands executed, attach UI screenshots when applicable, and highlight any risk areas (indexing throughput, icon rendering, search latency).

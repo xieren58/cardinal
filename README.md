@@ -1,118 +1,152 @@
 # Cardinal
 
-Cardinal 是一套“Rust + Tauri + React”构建的跨平台文件搜索工具链。项目包含一个桌面客户端、命令行/库级索引器以及若干共享组件，目标是在本地磁盘上提供实时、低延迟的搜索体验。
+> Local-first file search for macOS, powered by Rust, Tauri, and React.
 
-> 如果你刚加入，请先阅读 `doc/AGENTS.md` 获取贡献指南，再回到本文了解整体结构。
+Cardinal bundles a realtime filesystem indexer, a Tauri desktop client, and a command-line companion (`lsf`). The workspace is written primarily in Rust with a React front-end, aiming to deliver sub-second search across millions of files while staying responsive during incremental updates.
+
+This repository is now being prepared for public release. The documentation below introduces the stack, explains how to run and develop it, and points you to supporting guides listed in this README and under `doc/`.
 
 ---
 
-## 架构速览
+## Table of Contents
+
+1. [Highlights](#highlights)
+2. [Repository Layout](#repository-layout)
+3. [Getting Started](#getting-started)
+4. [Running Cardinal](#running-cardinal)
+5. [Testing & Quality Checks](#testing--quality-checks)
+6. [Documentation Index](#documentation-index)
+7. [Contributing](#contributing)
+8. [License](#license)
+
+---
+
+## Highlights
+
+- **Realtime indexing** – A full scan seeds the cache once, after which FSEvents keep results in sync with filesystem changes.
+- **Shared core** – Both the desktop app and the `lsf` CLI use the same `search-cache` engine for consistent behaviour.
+- **Virtualized UI** – The file list is virtualized and streams metadata/icons on demand to stay smooth with 10k+ results.
+- **Extensible workspace** – Supporting crates (`fswalk`, `cardinal-sdk`, `query-segmentation`, `fs-icon`, …) compose the end-to-end pipeline.
+- **Persistent caches** – Index state is compressed to disk between runs for quick warm starts.
+
+---
+
+## Repository Layout
 
 ```
-cardinal/           → 桌面客户端（Tauri + React）
-cardinal/src-tauri  → Tauri 后端，调用 Rust 搜索核心
-lsf/                → CLI 搜索工具（REPL 模式）
-search-cache/       → 核心索引、查询、事件处理逻辑
-fswalk/             → 文件树遍历器（Rayon 并行）
-cardinal-sdk/       → FSEvent 监听、公共类型
-namepool/, query-segmentation/, fs-icon/ … → 辅助库
+cardinal/           → Desktop client (Vite + React + Tauri)
+cardinal/src-tauri  → Tauri commands bridging to the Rust core
+lsf/                → Command-line search tool
+search-cache/       → Indexing, querying, and event ingestion logic
+fswalk/             → Parallel filesystem traversal utilities
+cardinal-sdk/       → Shared types, FSEvent bindings, helpers
+fs-icon/, namepool/, query-segmentation/ → Supporting crates
+doc/                → In-depth guides, testing notes, and design docs
 ```
 
-Rust 工作区固定在 `nightly-2025-05-09`，格式化规则见根目录 `rustfmt.toml`。
+The Rust workspace is pinned to `nightly-2025-05-09`; see `rust-toolchain.toml` and `rustfmt.toml` for formatting rules.
 
 ---
 
-## 功能亮点
+## Getting Started
 
-- **即时搜索**：首轮全量扫描后，借助 FSEvents 增量同步，保持索引新鲜。
-- **虚拟列表渲染**：大规模结果（10k+ 条）也能流畅滚动，详见 `doc/optimizations.md`。
-- **按需加载元数据 / 图标**：前端通过 Tauri 命令拉取节点信息与 QuickLook 图标。
-- **CLI & GUI 共用内核**：`lsf` 与桌面端共享 `search-cache`。
-- **持久化缓存**：退出时写入压缩文件，下次启动快速恢复。
+### Prerequisites
 
----
+- macOS 13 or newer (current icon/FSEvent plumbing targets macOS only)
+- [Rust](https://www.rust-lang.org/) toolchain `nightly-2025-05-09`
+- [Node.js](https://nodejs.org/) 18+ with npm
+- Homebrew dependencies for Tauri (see [Tauri prerequisites](https://tauri.app/start/prerequisites/) if you have not installed them)
 
-## 环境要求
+### Bootstrap the workspace
 
-- macOS (当前 FSEvent/图标实现针对 macOS；Windows/Linux 在计划中)
-- Rust nightly `nightly-2025-05-09`
-- Node.js 18+ & npm（用于 React/Tauri 前端）
-- pnpm/yarn 可选（仓库脚本默认使用 npm）
-
-安装依赖：
 ```bash
 rustup toolchain install nightly-2025-05-09
-cd cardinal
-npm install
+rustup component add rust-src --toolchain nightly-2025-05-09
+cargo install --locked tauri-cli            # optional if you prefer the CLI
+npm install --prefix cardinal               # install front-end deps
 ```
+
+Rust dependencies are vendored via `cargo` when you compile the workspace; no extra steps are needed beyond the toolchain install.
 
 ---
 
-## 快速开始
+## Running Cardinal
 
-### 桌面客户端（Tauri）
+### Desktop client (Tauri)
+
 ```bash
-# 开发模式（推荐）
+# Start the desktop shell (Rust backend + webview)
 cd cardinal
 npm run tauri dev -- --release --features dev
 
-# 预览仅限前端
+# Optional: run only the Vite front-end
 npm run dev
 
-# 打包构建
+# Produce a signed bundle
 npm run tauri build
 ```
 
-### 命令行工具（lsf）
+### Command-line search (`lsf`)
+
 ```bash
-cargo build -p lsf
-cargo run -p lsf -- --path $HOME --refresh
+cargo run -p lsf -- --path "$HOME" --refresh
 ```
-- `--refresh` 强制重建索引；不加时优先读取 `target/cache.zstd`。
-- 运行时输入 `/bye` 退出。
+
+`--refresh` forces a new scan; omit it to load the persisted cache in `target/cache.zstd`. Inside the REPL, type `/help` for commands and `/bye` to exit.
 
 ---
 
-## 测试与验证
+## Testing & Quality Checks
 
-- **Rust 单元测试**
+Run these before sending a pull request or cutting a release:
+
+- **Rust checks**
   ```bash
+  cargo fmt --all
+  cargo clippy --workspace --all-targets -D warnings
   cargo test --workspace
-  cargo test -p search-cache  # 关注事件处理、路径去重逻辑
   ```
-- **前端性能测试**：详见 `doc/testing.md`，包含 FPS 测量与性能回归步骤。
-- **优化记录与验证**：`doc/optimizations.md` 汇总历史优化、关键代码模式与指标。
+  Target a specific crate (e.g. `cargo test -p search-cache`) when iterating on focused changes.
+
+- **Front-end checks**
+  ```bash
+  cd cardinal
+  npm run format
+  npm run build
+  ```
+
+Performance and regression testing play a big role in keeping the UI smooth. [`doc/testing.md`](./doc/testing.md) describes a profiling workflow (FPS capture, Safari/Chrome tracing) that we follow when changing virtualization, icon loading, or search scheduling.
 
 ---
 
-## 重要文档导航
+## Documentation Index
 
-| 文档 | 内容 |
-| ----- | ----- |
-| `doc/README.md` | 文档索引（快速定位其他主题） |
-| `doc/AGENTS.md` | 贡献流程 / 代码风格 / PR 要求 |
-| `doc/testing.md` | 性能测试手册与基准场景 |
-| `doc/optimizations.md` | 优化记录、细节与快速参考 |
-| `doc/todo.md` | 优化与架构层面的待办列表 |
-| `doc/cli.md` | CLI 工具（lsf）使用说明 |
+- [`doc/README.md`](./doc/README.md) – navigates all available docs.
+- [`AGENTS.md`](./AGENTS.md) – in-depth internal guidelines (mirrored in the public [CONTRIBUTING](./CONTRIBUTING.md) notes).
+- [`doc/testing.md`](./doc/testing.md) – manual + automated test plans.
+- [`doc/optimizations.md`](./doc/optimizations.md) – historical performance work and design decisions.
+- [`doc/cli.md`](./doc/cli.md) – `lsf` usage and configuration.
+- [`doc/todo.md`](./doc/todo.md) – roadmap and ongoing investigations.
 
----
-
-## 当前重点与待办
-
-- QuickLook 图标缓存与 Viewport 调度优化
-- 搜索结果自动刷新、排序与更丰富的查询模式（正则、Glob、普通）
-- 元数据后台补水与索引扩展（ctime/mtime/size）
-- Windows / NTFS 支持探索
-
-更多细节请查看 `doc/todo.md`。
+Most documents are currently authored in Chinese; translations can be contributed incrementally. Feel free to open an issue if you need help locating a topic.
 
 ---
 
-## 支持与反馈
+## Contributing
 
-- 提交 Issue 或 PR 前请确保阅读 `doc/AGENTS.md`
-- 性能相关问题请附带 Chrome DevTools 录屏或 `cargo test -p search-cache` 结果
-- 如需要快速了解近期优化，可先查阅 `doc/optimizations.md`
+We welcome issues, bug reports, docs, and code contributions. Please read:
 
-欢迎贡献和反馈，让 Cardinal 更快、更稳、更好用！
+- [CONTRIBUTING.md](./CONTRIBUTING.md) for workflow, coding standards, and commit conventions.
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for community expectations.
+
+New contributors can start with documentation fixes, small UI improvements, or targeted tests (see [`doc/todo.md`](./doc/todo.md) for ideas). When filing issues, include platform details and reproduction steps; for performance regressions, attach profiler traces or screenshots when possible.
+
+---
+
+## License
+
+Cardinal is distributed under the [MIT License](./LICENSE). See the license file for details.
+
+---
+
+感谢所有贡献者！如果你更习惯阅读中文，请参考 `AGENTS.md` 以及相关文档；我们也欢迎提交英文/中文双语改进。Happy hacking!
