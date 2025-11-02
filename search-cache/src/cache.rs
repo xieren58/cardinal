@@ -229,7 +229,6 @@ impl SearchCache {
             Some((slab_root, slab))
         }
         fn name_index(slab: &ThinSlab<SlabNode>) -> BTreeMap<&'static str, HashSet<SlabIndex>> {
-            // TODO(ldm0): Memory optimization can be done by letting name index reference the name in the pool(gc need to be considered though)
             fn construct_name_index(
                 slab: &ThinSlab<SlabNode>,
                 name_index: &mut BTreeMap<&'static str, HashSet<SlabIndex>>,
