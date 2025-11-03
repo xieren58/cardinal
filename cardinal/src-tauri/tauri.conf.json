@@ -25,7 +25,7 @@
     "active": true,
     "targets": "all",
     "macOS": {
-      "signingIdentity": "Developer ID Application: Liu Dingming (53692XKS3X)",
+      "signingIdentity": "-",
       "minimumSystemVersion": "13.0"
     },
     "icon": [
