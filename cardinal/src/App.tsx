@@ -38,6 +38,7 @@ function App() {
     cancelPendingSearches,
     handleStatusUpdate,
     setLifecycleState,
+    requestRescan,
   } = useFileSearch();
   const {
     results,
@@ -366,6 +367,7 @@ function App() {
           resultCount={resultCount}
           activeTab={activeTab}
           onTabChange={handleTabChange}
+          onRequestRescan={requestRescan}
         />
       </main>
       {showFullDiskAccessOverlay && (

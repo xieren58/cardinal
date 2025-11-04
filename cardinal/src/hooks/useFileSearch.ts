@@ -140,6 +140,7 @@ type UseFileSearchResult = {
   cancelPendingSearches: () => void;
   handleStatusUpdate: (scannedFiles: number, processedEvents: number) => void;
   setLifecycleState: (status: AppLifecycleStatus) => void;
+  requestRescan: () => Promise<void>;
 };
 
 export function useFileSearch(): UseFileSearchResult {
@@ -298,6 +299,14 @@ export function useFileSearch(): UseFileSearchResult {
     void handleSearch();
   }, [handleSearch, searchParams.caseSensitive, searchParams.useRegex]);
 
+  const requestRescan = useCallback(async () => {
+    try {
+      await invoke('trigger_rescan');
+    } catch (error) {
+      console.error('Failed to request filesystem rescan:', error);
+    }
+  }, []);
+
   return {
     state,
     searchParams,
@@ -308,5 +317,6 @@ export function useFileSearch(): UseFileSearchResult {
     cancelPendingSearches,
     handleStatusUpdate,
     setLifecycleState,
+    requestRescan,
   };
 }

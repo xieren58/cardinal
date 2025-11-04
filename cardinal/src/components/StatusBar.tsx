@@ -12,6 +12,7 @@ type StatusBarProps = {
   resultCount?: number | null;
   activeTab?: StatusTabKey;
   onTabChange?: (tab: StatusTabKey) => void;
+  onRequestRescan?: () => void;
 };
 
 const TABS: Array<{ key: StatusTabKey; label: string }> = [
@@ -33,6 +34,7 @@ const StatusBar = ({
   resultCount,
   activeTab = 'files',
   onTabChange,
+  onRequestRescan,
 }: StatusBarProps): React.JSX.Element => {
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const filesTabRef = useRef<HTMLButtonElement | null>(null);
@@ -76,6 +78,17 @@ const StatusBar = ({
     typeof searchDurationMs === 'number' ? `${Math.round(searchDurationMs)}ms` : null;
   const searchDisplay = durationText ? `${resultsText} • ${durationText}` : resultsText;
   const lifecycle = LIFECYCLE_DISPLAY[lifecycleState] ?? LIFECYCLE_DISPLAY.Initializing;
+  const rescanDisabled = lifecycleState !== 'Ready';
+  const rescanTitle = rescanDisabled
+    ? 'Rescan becomes available once Cardinal finishes initializing.'
+    : 'Trigger a full filesystem rescan.';
+
+  const handleRescanClick = useCallback(() => {
+    if (rescanDisabled) {
+      return;
+    }
+    onRequestRescan?.();
+  }, [onRequestRescan, rescanDisabled]);
 
   return (
     <div className="status-bar">
@@ -114,6 +127,19 @@ const StatusBar = ({
             );
           })}
         </div>
+        <button
+          type="button"
+          className="status-rescan-button"
+          onClick={handleRescanClick}
+          disabled={rescanDisabled}
+          title={rescanTitle}
+          aria-label="Trigger filesystem rescan"
+        >
+          <span className="status-rescan-icon" aria-hidden="true">
+            ↻
+          </span>
+          <span className="sr-only">Trigger filesystem rescan</span>
+        </button>
       </div>
 
       <div className="status-right">

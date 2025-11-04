@@ -119,6 +119,7 @@ struct SearchState {
     node_info_results_rx: Receiver<Vec<SearchResultNode>>,
 
     icon_viewport_tx: Sender<(u64, Vec<SlabIndex>)>,
+    rescan_tx: Sender<()>,
 }
 
 #[tauri::command]
@@ -242,6 +243,7 @@ fn run_background_event_loop(
     node_info_rx: Receiver<Vec<SlabIndex>>,
     node_info_results_tx: Sender<Vec<SearchResultNode>>,
     icon_viewport_rx: Receiver<(u64, Vec<SlabIndex>)>,
+    rescan_rx: Receiver<()>,
     icon_update_tx: Sender<IconPayload>,
     watch_root: &str,
     fse_latency_secs: f64,
@@ -298,6 +300,57 @@ fn run_background_event_loop(
                         }
                     });
                 });
+            }
+            recv(rescan_rx) -> request => {
+                request.expect("Rescan channel closed");
+                info!("Manual rescan requested");
+                update_app_state(app_handle, AppLifecycleState::Initializing);
+                app_handle
+                    .emit(
+                        "status_bar_update",
+                        StatusBarUpdate {
+                            scanned_files: 0,
+                            processed_events: 0,
+                        },
+                    )
+                    .unwrap();
+
+                #[allow(unused_assignments)]
+                {
+                    event_watcher = EventWatcher::noop();
+                }
+
+                let walk_data = cache.walk_data();
+                let walking_done = AtomicBool::new(false);
+                std::thread::scope(|s| {
+                    s.spawn(|| {
+                        while !walking_done.load(Ordering::Relaxed) {
+                            let dirs = walk_data.num_dirs.load(Ordering::Relaxed);
+                            let files = walk_data.num_files.load(Ordering::Relaxed);
+                            let total = dirs + files;
+                            app_handle
+                                .emit(
+                                    "status_bar_update",
+                                    StatusBarUpdate {
+                                        scanned_files: total,
+                                        processed_events: 0,
+                                    },
+                                )
+                                .unwrap();
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                    });
+                    cache.rescan_with_walk_data(&walk_data);
+                    walking_done.store(true, Ordering::Relaxed);
+                });
+
+                let (_, watcher) = EventWatcher::spawn(
+                    watch_root.to_string(),
+                    cache.last_event_id(),
+                    fse_latency_secs,
+                );
+                event_watcher = watcher;
+                history_ready = false;
             }
             recv(event_watcher) -> events => {
                 let events = events.expect("Event stream closed");
@@ -406,6 +459,15 @@ async fn get_app_status() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn trigger_rescan(state: State<'_, SearchState>) -> Result<(), String> {
+    state
+        .rescan_tx
+        .send(())
+        .map_err(|e| format!("Failed to request rescan: {:?}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
 fn open_in_finder(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -463,6 +525,7 @@ pub fn run() -> Result<()> {
     let (node_info_tx, node_info_rx) = unbounded();
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
     let (icon_viewport_tx, icon_viewport_rx) = unbounded::<(u64, Vec<SlabIndex>)>();
+    let (rescan_tx, rescan_rx) = unbounded::<()>();
     let (icon_update_tx, icon_update_rx) = unbounded::<IconPayload>();
     let mut builder = tauri::Builder::default();
     #[cfg(not(feature = "dev"))]
@@ -481,12 +544,14 @@ pub fn run() -> Result<()> {
             node_info_tx,
             node_info_results_rx,
             icon_viewport_tx: icon_viewport_tx.clone(),
+            rescan_tx: rescan_tx.clone(),
         })
         .invoke_handler(tauri::generate_handler![
             search,
             get_nodes_info,
             update_icon_viewport,
             get_app_status,
+            trigger_rescan,
             open_in_finder
         ])
         .build(tauri::generate_context!())
@@ -627,6 +692,7 @@ pub fn run() -> Result<()> {
                 node_info_rx,
                 node_info_results_tx,
                 icon_viewport_rx,
+                rescan_rx,
                 icon_update_tx,
                 WATCH_ROOT,
                 FSE_LATENCY_SECS,

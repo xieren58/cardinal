@@ -510,6 +510,27 @@ impl SearchCache {
         Some(self.create_node_chain(path))
     }
 
+    pub fn walk_data(&self) -> WalkData<'static> {
+        WalkData::new(self.ignore_path, false, self.cancel)
+    }
+
+    pub fn rescan_with_walk_data(
+        &mut self,
+        walk_data: &WalkData,
+    ) -> Option<()> {
+        let Some(new_cache) = Self::walk_fs_with_walk_data(
+            self.path.clone(),
+            walk_data,
+            self.ignore_path,
+            self.cancel,
+        ) else {
+            info!("Rescan cancelled.");
+            return None;
+        };
+        *self = new_cache;
+        Some(())
+    }
+
     pub fn rescan(&mut self) {
         // Remove all memory consuming cache early for memory consumption in Self::walk_fs_new.
         let Some(new_cache) = Self::walk_fs_with_walk_data(

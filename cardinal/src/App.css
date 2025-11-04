@@ -779,6 +779,39 @@ button:active {
   position: relative;
 }
 
+.status-rescan-button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(33, 37, 41, 0.9);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+}
+
+.status-rescan-button:hover:not(:disabled),
+.status-rescan-button:focus-visible:not(:disabled) {
+  background: rgba(248, 249, 252, 1);
+  color: rgba(33, 37, 41, 0.96);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.18);
+  outline: none;
+}
+
+.status-rescan-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
 .status-tabs-slider {
   position: absolute;
   top: 3px;
@@ -867,6 +900,24 @@ button:active {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   }
 
+  .status-rescan-button {
+    background: rgba(38, 47, 61, 0.82);
+    color: rgba(226, 232, 240, 0.86);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  .status-rescan-button:hover:not(:disabled),
+  .status-rescan-button:focus-visible:not(:disabled) {
+    background: rgba(53, 63, 80, 0.92);
+    color: rgba(248, 250, 252, 0.96);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  }
+
+
+.status-rescan-icon {
+  font-size: 12px;
+  line-height: 1;
+}
   .status-tab {
     color: rgba(226, 232, 240, 0.72);
   }
