@@ -486,11 +486,6 @@ button:active {
   animation: fadeIn 0.25s ease;
 }
 
-.events-empty__hint {
-  font-size: 12px;
-  color: var(--color-muted);
-}
-
 .empty-icon {
   color: var(--color-border);
   opacity: 0.8;

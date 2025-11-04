@@ -233,7 +233,6 @@ const FSEventsPanel = forwardRef<FSEventsPanelHandle, FSEventsPanelProps>(
           {events.length === 0 ? (
             <div className="events-empty" role="status">
               <p>No recent file events yet.</p>
-              <p className="events-empty__hint">Keep working and check back for updates.</p>
             </div>
           ) : (
             <AutoSizer>
