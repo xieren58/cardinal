@@ -45,8 +45,7 @@
     },
     "lifecycle": {
       "Initializing": "Inicializando",
-      "Ready": "Listo",
-      "Closing": "Cerrando"
+      "Ready": "Listo"
     },
     "aria": {
       "status": "Estado de la aplicación: {{status}}",

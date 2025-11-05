@@ -45,8 +45,7 @@
     },
     "lifecycle": {
       "Initializing": "正在初始化",
-      "Ready": "就绪",
-      "Closing": "正在关闭"
+      "Ready": "就绪"
     },
     "aria": {
       "status": "应用状态：{{status}}",

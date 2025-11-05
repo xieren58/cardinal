@@ -992,9 +992,6 @@ button:active {
 .readiness-indicator.initializing {
   color: #ff9800;
 }
-.readiness-indicator.closing {
-  color: #9e9e9e;
-}
 
 .status-label {
   color: var(--color-muted);

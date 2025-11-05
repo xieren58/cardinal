@@ -45,8 +45,7 @@
     },
     "lifecycle": {
       "Initializing": "初期化中",
-      "Ready": "準備完了",
-      "Closing": "終了処理中"
+      "Ready": "準備完了"
     },
     "aria": {
       "status": "アプリケーションの状態: {{status}}",

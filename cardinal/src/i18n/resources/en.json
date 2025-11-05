@@ -45,8 +45,7 @@
     },
     "lifecycle": {
       "Initializing": "Initializing",
-      "Ready": "Ready",
-      "Closing": "Closing"
+      "Ready": "Ready"
     },
     "aria": {
       "status": "Application status: {{status}}",
