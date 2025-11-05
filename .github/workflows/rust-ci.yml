@@ -16,7 +16,7 @@ env:
 jobs:
   rust:
     name: Rust ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +61,7 @@ jobs:
 
   tauri:
     name: Tauri ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     strategy:
       fail-fast: false
       matrix:

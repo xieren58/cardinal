@@ -15,7 +15,7 @@ env:
 jobs:
   npm:
     name: Frontend build and tests
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     defaults:
       run:
         working-directory: cardinal
