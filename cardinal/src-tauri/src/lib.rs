@@ -283,20 +283,22 @@ fn run_background_event_loop(
                     continue;
                 }
 
-                icon_jobs.into_iter().for_each(|(slab_index, path)| {
-                    let icon_update_tx = icon_update_tx.clone();
-                    spawn(move || {
-                        if let Some(icon) = path
-                            .to_str()
-                            .and_then(fs_icon::icon_of_path_ql)
-                            .map(|data| format!(
+                icon_jobs
+                    .into_iter()
+                    .map(|(slab_index, path)| (slab_index, path.to_string_lossy().into_owned()))
+                    // Filter out OneDrive paths to avoid triggering file download
+                    .filter(|(_, path)| !path.contains("OneDrive"))
+                    .for_each(|(slab_index, path)| {
+                        let icon_update_tx = icon_update_tx.clone();
+                        spawn(move || {
+                            if let Some(icon) = fs_icon::icon_of_path_ql(&path).map(|data| format!(
                                 "data:image/png;base64,{}",
                                 general_purpose::STANDARD.encode(&data)
                             )) {
-                            let _ = icon_update_tx.send(IconPayload { slab_index, icon });
-                        }
+                                let _ = icon_update_tx.send(IconPayload { slab_index, icon });
+                            }
+                        });
                     });
-                });
             }
             recv(rescan_rx) -> request => {
                 request.expect("Rescan channel closed");
