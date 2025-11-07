@@ -1,8 +1,5 @@
-use std::sync::{
-    atomic::{AtomicBool, AtomicU8, Ordering},
-};
-
-use tauri::AppHandle;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use tauri::{AppHandle, Emitter};
 use tracing::error;
 
 #[repr(u8)]

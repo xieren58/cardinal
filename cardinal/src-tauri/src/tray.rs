@@ -1,10 +1,10 @@
+use crate::{lifecycle::EXIT_REQUESTED, window_controls::activate_window};
 use tauri::{
+    Manager,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
 };
 use tracing::warn;
-
-use crate::{lifecycle::EXIT_REQUESTED, window_controls::activate_window};
 
 const TRAY_MENU_QUIT_ID: &str = "tray.quit_cardinal";
 

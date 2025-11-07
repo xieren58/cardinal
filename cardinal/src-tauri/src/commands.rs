@@ -1,13 +1,11 @@
-use std::path::Path;
-
+use crate::lifecycle::load_app_state;
 use anyhow::Result as AnyhowResult;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use crossbeam_channel::{Receiver, Sender};
 use search_cache::{SearchOptions, SearchResultNode, SlabIndex, SlabNodeMetadata};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use tauri::State;
-
-use crate::lifecycle::load_app_state;
 
 #[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]

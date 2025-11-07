@@ -1,25 +1,21 @@
+use crate::{
+    commands::SearchJob,
+    lifecycle::{AppLifecycleState, load_app_state, update_app_state},
+};
+use anyhow::Result as AnyhowResult;
+use base64::{Engine as _, engine::general_purpose};
+use cardinal_sdk::{EventFlag, EventWatcher};
+use crossbeam_channel::{Receiver, Sender};
+use rayon::spawn;
+use search_cache::{HandleFSEError, SearchCache, SearchOptions, SearchResultNode, SlabIndex};
+use serde::Serialize;
 use std::{
     path::PathBuf,
     sync::atomic::AtomicBool,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-
-use anyhow::Result as AnyhowResult;
-use base64::{engine::general_purpose, Engine as _};
-use cardinal_sdk::{EventFlag, EventWatcher};
-use crossbeam_channel::{Receiver, Sender};
-use rayon::spawn;
-use search_cache::{
-    HandleFSEError, SearchCache, SearchOptions, SearchResultNode, SlabIndex,
-};
-use serde::Serialize;
-use tauri::AppHandle;
-use tracing::{info, warn};
-
-use crate::{
-    commands::SearchJob,
-    lifecycle::{load_app_state, update_app_state, AppLifecycleState},
-};
+use tauri::{AppHandle, Emitter};
+use tracing::info;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -35,7 +31,11 @@ pub struct IconPayload {
     pub icon: String,
 }
 
-pub fn emit_status_bar_update(app_handle: &AppHandle, scanned_files: usize, processed_events: usize) {
+pub fn emit_status_bar_update(
+    app_handle: &AppHandle,
+    scanned_files: usize,
+    processed_events: usize,
+) {
     app_handle
         .emit(
             "status_bar_update",

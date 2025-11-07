@@ -5,14 +5,22 @@ mod tray;
 mod window_controls;
 
 use anyhow::{Context, Result};
-use cardinal_sdk::{EventWatcher, SearchCache, WalkData};
-use crossbeam_channel::{bounded, unbounded, Sender};
-use search_cache::{SearchResultNode, SlabIndex};
+use background::{IconPayload, emit_status_bar_update, run_background_event_loop};
+use cardinal_sdk::EventWatcher;
+use commands::{
+    SearchJob, SearchState, get_app_status, get_nodes_info, open_in_finder, search, trigger_rescan,
+    update_icon_viewport,
+};
+use crossbeam_channel::{Sender, bounded, unbounded};
+use lifecycle::{
+    APP_QUIT, AppLifecycleState, EXIT_REQUESTED, emit_app_state, load_app_state, update_app_state,
+};
+use search_cache::{SearchCache, SearchResultNode, SlabIndex, WalkData};
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
         LazyLock, Once,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -20,17 +28,8 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WindowEvent};
 use tauri_plugin_global_shortcut::ShortcutState;
 use tracing::{info, level_filters::LevelFilter, warn};
 use tracing_subscriber::EnvFilter;
-use window_controls::{activate_window, hide_window, toggle_window, WindowToggle};
-
-use background::{emit_status_bar_update, run_background_event_loop, IconPayload};
-use commands::{
-    get_app_status, get_nodes_info, open_in_finder, search, trigger_rescan, update_icon_viewport,
-    SearchJob, SearchState,
-};
-use lifecycle::{
-    emit_app_state, load_app_state, update_app_state, AppLifecycleState, APP_QUIT, EXIT_REQUESTED,
-};
 use tray::setup_tray;
+use window_controls::{WindowToggle, activate_window, hide_window, toggle_window};
 
 static CACHE_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     directories::ProjectDirs::from("", "", "Cardinal")
@@ -172,11 +171,7 @@ pub fn run() -> Result<()> {
             ) {
                 Ok(cached) => {
                     info!("Loaded existing cache");
-                    emit_status_bar_update(
-                        app_handle,
-                        cached.get_total_files(),
-                        0,
-                    );
+                    emit_status_bar_update(app_handle, cached.get_total_files(), 0);
                     cached
                 }
                 Err(e) => {
