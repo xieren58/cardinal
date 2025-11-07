@@ -539,12 +539,20 @@ button:active {
 }
 
 @media (prefers-color-scheme: dark) {
-  .empty-icon {
+  :root:not([data-theme]) .empty-icon {
     color: var(--color-resizer);
   }
-  .empty-title {
+  :root:not([data-theme]) .empty-title {
     color: var(--color-text);
   }
+}
+
+[data-theme='dark'] .empty-icon {
+  color: var(--color-resizer);
+}
+
+[data-theme='dark'] .empty-title {
+  color: var(--color-text);
 }
 
 /* Rows (rendered inside virtual list) */
@@ -677,7 +685,7 @@ button:active {
 
 /* === Dark Mode === */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --color-text: #e9ecef;
     --color-bg: rgb(32, 32, 32);
     --color-muted: #adb5bd;
@@ -693,53 +701,105 @@ button:active {
     --search-toggle-hover-bg: rgba(255, 255, 255, 0.14);
   }
 
-  a:hover {
+  :root:not([data-theme]) a:hover {
     color: var(--color-accent);
   }
 
-  /* Preserve visible borders for inputs/buttons in dark mode */
-  input,
-  button {
-    border: 1px solid var(--color-elevated-border);
-  }
-
   /* Preserve dark active background */
-  button:active {
+  :root:not([data-theme]) button:active {
     background-color: #343a40;
   }
 
   /* Virtual scrollbar styling for dark mode (Safari aesthetic). */
-  .virtual-scrollbar-thumb {
+  :root:not([data-theme]) .virtual-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.35);
     box-shadow:
       0 0 0 1px rgba(0, 0, 0, 0.4),
       0 1px 2px rgba(0, 0, 0, 0.5);
   }
-  .virtual-scrollbar-track:hover .virtual-scrollbar-thumb,
-  .virtual-scrollbar-track.is-dragging .virtual-scrollbar-thumb {
+  :root:not([data-theme]) .virtual-scrollbar-track:hover .virtual-scrollbar-thumb,
+  :root:not([data-theme]) .virtual-scrollbar-track.is-dragging .virtual-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.55);
   }
-  .virtual-scrollbar-thumb:active {
+  :root:not([data-theme]) .virtual-scrollbar-thumb:active {
     background: rgba(255, 255, 255, 0.75);
   }
 
-  .permission-overlay {
+  :root:not([data-theme]) .permission-overlay {
     background: rgba(7, 9, 14, 0.72);
   }
 
-  .permission-card {
+  :root:not([data-theme]) .permission-card {
     background: var(--color-elevated-bg);
     color: var(--color-text);
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
   }
 
-  .permission-card h1 {
+  :root:not([data-theme]) .permission-card h1 {
     color: var(--color-text);
   }
 
-  .permission-status {
+  :root:not([data-theme]) .permission-status {
     color: rgba(226, 232, 240, 0.75);
   }
+}
+
+:root[data-theme='dark'] {
+  --color-text: #e9ecef;
+  --color-bg: rgb(32, 32, 32);
+  --color-muted: #adb5bd;
+  --color-header: #ced4da;
+  --color-border: #343a40;
+  --color-elevated-bg: #212529;
+  --color-elevated-border: #343a40;
+  --color-resizer: #495057;
+  --color-accent: #0d6efd;
+  --row-even: rgb(32, 32, 32);
+  --row-odd: rgb(43, 43, 42);
+  --row-hover: rgb(70, 70, 70);
+  --search-toggle-hover-bg: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme='dark'] a:hover {
+  color: var(--color-accent);
+}
+
+/* Preserve dark active background */
+[data-theme='dark'] button:active {
+  background-color: #343a40;
+}
+
+/* Virtual scrollbar styling for dark mode (Safari aesthetic). */
+[data-theme='dark'] .virtual-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+[data-theme='dark'] .virtual-scrollbar-track:hover .virtual-scrollbar-thumb,
+[data-theme='dark'] .virtual-scrollbar-track.is-dragging .virtual-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.55);
+}
+[data-theme='dark'] .virtual-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+[data-theme='dark'] .permission-overlay {
+  background: rgba(7, 9, 14, 0.72);
+}
+
+[data-theme='dark'] .permission-card {
+  background: var(--color-elevated-bg);
+  color: var(--color-text);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='dark'] .permission-card h1 {
+  color: var(--color-text);
+}
+
+[data-theme='dark'] .permission-status {
+  color: rgba(226, 232, 240, 0.75);
 }
 
 /* === Merged: StatusBar.css === */
@@ -894,60 +954,115 @@ button:active {
 }
 
 @media (prefers-color-scheme: dark) {
-  .status-left > .status-section:first-of-type {
+  :root:not([data-theme]) .status-left > .status-section:first-of-type {
     border-right-color: rgba(255, 255, 255, 0.08);
   }
 
-  .status-tabs {
+  :root:not([data-theme]) .status-tabs {
     background: rgba(24, 29, 38, 0.7);
     border: 0px;
   }
 
-  .status-tabs-slider {
+  :root:not([data-theme]) .status-tabs-slider {
     background-color: rgba(60, 70, 85, 0.55);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   }
 
-  .status-icon-button {
+  :root:not([data-theme]) .status-icon-button {
     background: rgba(38, 47, 61, 0.82);
     color: rgba(226, 232, 240, 0.86);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 
-  .status-icon-button:hover:not(:disabled),
-  .status-icon-button:focus-visible:not(:disabled) {
+  :root:not([data-theme]) .status-icon-button:hover:not(:disabled),
+  :root:not([data-theme]) .status-icon-button:focus-visible:not(:disabled) {
     background: rgba(53, 63, 80, 0.92);
     color: rgba(248, 250, 252, 0.96);
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
   }
 
-  .status-rescan-icon {
+  :root:not([data-theme]) .status-rescan-icon {
     font-size: 12px;
     line-height: 1;
   }
-  .status-tab {
+  :root:not([data-theme]) .status-tab {
     color: rgba(226, 232, 240, 0.72);
   }
 
-  .status-tab:hover {
+  :root:not([data-theme]) .status-tab:hover {
     color: rgba(248, 250, 252, 0.95);
   }
 
-  .status-tab:focus-visible {
+  :root:not([data-theme]) .status-tab:focus-visible {
     color: rgba(248, 250, 252, 0.95);
   }
 
-  .status-tab.is-active {
+  :root:not([data-theme]) .status-tab.is-active {
     color: rgba(248, 250, 252, 0.98);
   }
 
-  .status-tab[data-tone='files'] {
+  :root:not([data-theme]) .status-tab[data-tone='files'] {
     --status-tab-color: #68d391;
   }
 
-  .status-tab[data-tone='events'] {
+  :root:not([data-theme]) .status-tab[data-tone='events'] {
     --status-tab-color: #ff9770;
   }
+}
+
+[data-theme='dark'] .status-left > .status-section:first-of-type {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .status-tabs {
+  background: rgba(24, 29, 38, 0.7);
+  border: 0px;
+}
+
+[data-theme='dark'] .status-tabs-slider {
+  background-color: rgba(60, 70, 85, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .status-icon-button {
+  background: rgba(38, 47, 61, 0.82);
+  color: rgba(226, 232, 240, 0.86);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='dark'] .status-icon-button:hover:not(:disabled),
+[data-theme='dark'] .status-icon-button:focus-visible:not(:disabled) {
+  background: rgba(53, 63, 80, 0.92);
+  color: rgba(248, 250, 252, 0.96);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .status-rescan-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+[data-theme='dark'] .status-tab {
+  color: rgba(226, 232, 240, 0.72);
+}
+
+[data-theme='dark'] .status-tab:hover {
+  color: rgba(248, 250, 252, 0.95);
+}
+
+[data-theme='dark'] .status-tab:focus-visible {
+  color: rgba(248, 250, 252, 0.95);
+}
+
+[data-theme='dark'] .status-tab.is-active {
+  color: rgba(248, 250, 252, 0.98);
+}
+
+[data-theme='dark'] .status-tab[data-tone='files'] {
+  --status-tab-color: #68d391;
+}
+
+[data-theme='dark'] .status-tab[data-tone='events'] {
+  --status-tab-color: #ff9770;
 }
 
 .status-right {
@@ -963,17 +1078,20 @@ button:active {
   gap: 8px;
 }
 
-.language-switcher {
+.language-switcher,
+.theme-switcher {
   position: relative;
   line-height: 1;
 }
 
-.language-switcher__display {
+.language-switcher__display,
+.theme-switcher__display {
   pointer-events: none;
   font-size: 10px;
 }
 
-.language-switcher__select {
+.language-switcher__select,
+.theme-switcher__select {
   position: absolute;
   inset: 0;
   opacity: 0;

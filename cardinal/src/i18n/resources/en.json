@@ -84,5 +84,13 @@
     "label": "Language",
     "separator": ":",
     "trigger": "🌐"
+  },
+  "theme": {
+    "label": "Theme",
+    "options": {
+      "system": "System Default",
+      "light": "Light",
+      "dark": "Dark"
+    }
   }
 }

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { AppLifecycleStatus } from '../types/ipc';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './LanguageSwitcher';
+import ThemeSwitcher from './ThemeSwitcher';
 
 export type StatusTabKey = 'files' | 'events';
 
@@ -158,6 +159,7 @@ const StatusBar = ({
             </span>
             <span className="sr-only">{t('statusBar.aria.rescan')}</span>
           </button>
+          <ThemeSwitcher className="status-icon-button status-theme-switcher" />
           <LanguageSwitcher className="status-icon-button status-language-switcher" />
         </div>
       </div>

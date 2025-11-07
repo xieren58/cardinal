@@ -6,6 +6,7 @@ export { ContextMenu } from './components/ContextMenu';
 export { FileRow } from './components/FileRow';
 export { VirtualList } from './components/VirtualList';
 export { default as LanguageSwitcher } from './components/LanguageSwitcher';
+export { default as ThemeSwitcher } from './components/ThemeSwitcher';
 // Hooks
 export { useColumnResize } from './hooks/useColumnResize';
 export { useContextMenu } from './hooks/useContextMenu';

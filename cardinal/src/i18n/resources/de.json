@@ -84,5 +84,13 @@
     "label": "Sprache",
     "separator": ":",
     "trigger": "🌐"
+  },
+  "theme": {
+    "label": "Design",
+    "options": {
+      "system": "Systemstandard",
+      "light": "Hell",
+      "dark": "Dunkel"
+    }
   }
 }
