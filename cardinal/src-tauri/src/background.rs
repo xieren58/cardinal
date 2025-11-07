@@ -1,0 +1,248 @@
+use std::{
+    path::PathBuf,
+    sync::atomic::AtomicBool,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+use anyhow::Result as AnyhowResult;
+use base64::{engine::general_purpose, Engine as _};
+use cardinal_sdk::{EventFlag, EventWatcher};
+use crossbeam_channel::{Receiver, Sender};
+use rayon::spawn;
+use search_cache::{
+    HandleFSEError, SearchCache, SearchOptions, SearchResultNode, SlabIndex,
+};
+use serde::Serialize;
+use tauri::AppHandle;
+use tracing::{info, warn};
+
+use crate::{
+    commands::SearchJob,
+    lifecycle::{load_app_state, update_app_state, AppLifecycleState},
+};
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusBarUpdate {
+    pub scanned_files: usize,
+    pub processed_events: usize,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IconPayload {
+    pub slab_index: SlabIndex,
+    pub icon: String,
+}
+
+struct EventSnapshot {
+    path: PathBuf,
+    event_id: u64,
+    flag: EventFlag,
+    timestamp: i64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RecentEvent {
+    path: String,
+    flag_bits: u32,
+    event_id: u64,
+    timestamp: i64,
+}
+
+pub fn run_background_event_loop(
+    app_handle: &AppHandle,
+    mut cache: SearchCache,
+    mut event_watcher: EventWatcher,
+    finish_rx: Receiver<Sender<Option<SearchCache>>>,
+    search_rx: Receiver<SearchJob>,
+    result_tx: Sender<AnyhowResult<Vec<SlabIndex>>>,
+    node_info_rx: Receiver<Vec<SlabIndex>>,
+    node_info_results_tx: Sender<Vec<SearchResultNode>>,
+    icon_viewport_rx: Receiver<(u64, Vec<SlabIndex>)>,
+    rescan_rx: Receiver<()>,
+    icon_update_tx: Sender<IconPayload>,
+    watch_root: &str,
+    fse_latency_secs: f64,
+) {
+    let mut processed_events = 0usize;
+    let mut history_ready = matches!(load_app_state(), AppLifecycleState::Ready);
+    loop {
+        crossbeam_channel::select! {
+            recv(finish_rx) -> tx => {
+                let tx = tx.expect("Finish channel closed");
+                tx.send(Some(cache)).expect("Failed to send cache");
+                return;
+            }
+            recv(search_rx) -> job => {
+                let SearchJob { query, options } = job.expect("Search channel closed");
+                let opts = SearchOptions::from(options);
+                let result = if query.is_empty() {
+                    Ok(cache.search_empty())
+                } else {
+                    cache.search_with_options(&query, opts)
+                };
+                result_tx.send(result).expect("Failed to send result");
+            }
+            recv(node_info_rx) -> results => {
+                let results = results.expect("Node info channel closed");
+                let node_info_results = cache.expand_file_nodes(&results);
+                node_info_results_tx.send(node_info_results).expect("Failed to send node info results");
+            }
+            recv(icon_viewport_rx) -> update => {
+                let (_request_id, viewport) = update.expect("Icon viewport channel closed");
+
+                let nodes = cache.expand_file_nodes(&viewport);
+                let icon_jobs: Vec<_> = viewport
+                    .into_iter()
+                    .zip(nodes.into_iter())
+                    .map(|(slab_index, SearchResultNode { path, .. })| (slab_index, path))
+                    .collect();
+
+                if icon_jobs.is_empty() {
+                    continue;
+                }
+
+                icon_jobs
+                    .into_iter()
+                    .map(|(slab_index, path)| (slab_index, path.to_string_lossy().into_owned()))
+                    .filter(|(_, path)| !path.contains("OneDrive") && !path.contains("com~apple~CloudDocs"))
+                    .for_each(|(slab_index, path)| {
+                        let icon_update_tx = icon_update_tx.clone();
+                        spawn(move || {
+                            if let Some(icon) = fs_icon::icon_of_path_ql(&path).map(|data| format!(
+                                "data:image/png;base64,{}",
+                                general_purpose::STANDARD.encode(&data)
+                            )) {
+                                let _ = icon_update_tx.send(IconPayload { slab_index, icon });
+                            }
+                        });
+                    });
+            }
+            recv(rescan_rx) -> request => {
+                request.expect("Rescan channel closed");
+                info!("Manual rescan requested");
+                update_app_state(app_handle, AppLifecycleState::Initializing);
+                app_handle
+                    .emit(
+                        "status_bar_update",
+                        StatusBarUpdate {
+                            scanned_files: 0,
+                            processed_events: 0,
+                        },
+                    )
+                    .unwrap();
+
+                #[allow(unused_assignments)]
+                {
+                    event_watcher = EventWatcher::noop();
+                }
+
+                let walk_data = cache.walk_data();
+                let walking_done = AtomicBool::new(false);
+                std::thread::scope(|s| {
+                    s.spawn(|| {
+                        while !walking_done.load(std::sync::atomic::Ordering::Relaxed) {
+                            let dirs = walk_data.num_dirs.load(std::sync::atomic::Ordering::Relaxed);
+                            let files = walk_data.num_files.load(std::sync::atomic::Ordering::Relaxed);
+                            let total = dirs + files;
+                            app_handle
+                                .emit(
+                                    "status_bar_update",
+                                    StatusBarUpdate {
+                                        scanned_files: total,
+                                        processed_events: 0,
+                                    },
+                                )
+                                .unwrap();
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                    });
+                    cache.rescan_with_walk_data(&walk_data);
+                    walking_done.store(true, std::sync::atomic::Ordering::Relaxed);
+                });
+
+                let (_, watcher) = EventWatcher::spawn(
+                    watch_root.to_string(),
+                    cache.last_event_id(),
+                    fse_latency_secs,
+                );
+                event_watcher = watcher;
+                history_ready = false;
+            }
+            recv(event_watcher) -> events => {
+                let events = events.expect("Event stream closed");
+                processed_events += events.len();
+
+                app_handle.emit("status_bar_update", StatusBarUpdate {
+                    scanned_files: cache.get_total_files(),
+                    processed_events
+                }).unwrap();
+
+                let mut snapshots = Vec::with_capacity(events.len());
+                for event in events.iter() {
+                    if event.flag == EventFlag::HistoryDone {
+                        history_ready = true;
+                        update_app_state(app_handle, AppLifecycleState::Ready);
+                    } else if history_ready {
+                        snapshots.push(EventSnapshot {
+                            path: event.path.clone(),
+                            event_id: event.id,
+                            flag: event.flag,
+                            timestamp: unix_timestamp_now(),
+                        });
+                    }
+                }
+
+                let handle_result = cache.handle_fs_events(events);
+                if let Err(HandleFSEError::Rescan) = handle_result {
+                    info!("!!!!!!!!!! Rescan triggered !!!!!!!!");
+                    #[allow(unused_assignments)]
+                    {
+                        event_watcher = EventWatcher::noop();
+                    }
+                    cache.rescan();
+                    event_watcher = EventWatcher::spawn(watch_root.to_string(), cache.last_event_id(), fse_latency_secs).1;
+                    update_app_state(app_handle, AppLifecycleState::Initializing);
+                    history_ready = false;
+                }
+
+                if history_ready && !snapshots.is_empty() {
+                    forward_new_events(app_handle, &snapshots);
+                }
+            }
+        }
+    }
+}
+
+fn unix_timestamp_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn forward_new_events(app_handle: &AppHandle, snapshots: &[EventSnapshot]) {
+    if snapshots.is_empty() {
+        return;
+    }
+
+    let mut ordered_events: Vec<&EventSnapshot> = snapshots.iter().collect();
+    ordered_events.sort_unstable_by(|a, b| {
+        a.timestamp
+            .cmp(&b.timestamp)
+            .then_with(|| a.event_id.cmp(&b.event_id))
+    });
+    let new_events: Vec<RecentEvent> = ordered_events
+        .into_iter()
+        .map(|event| RecentEvent {
+            path: event.path.to_string_lossy().into_owned(),
+            flag_bits: event.flag.bits(),
+            event_id: event.event_id,
+            timestamp: event.timestamp,
+        })
+        .collect();
+
+    let _ = app_handle.emit("fs_events_batch", new_events);
+}
