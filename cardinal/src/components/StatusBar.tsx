@@ -90,7 +90,7 @@ const StatusBar = ({
   const lifecycleMeta = LIFECYCLE_META[lifecycleState] ?? LIFECYCLE_META.Initializing;
   const lifecycleLabel =
     t(`statusBar.lifecycle.${lifecycleState}`) ?? t('statusBar.lifecycle.Initializing');
-  const rescanDisabled = lifecycleState !== 'Ready';
+  const rescanDisabled = lifecycleState === 'Initializing';
   const rescanTitle = rescanDisabled
     ? t('statusBar.rescan.disabledHint')
     : t('statusBar.rescan.enabledHint');
