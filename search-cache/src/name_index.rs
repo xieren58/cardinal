@@ -1,18 +1,71 @@
-use crate::{NAME_POOL, SlabIndex, SlabNode, ThinSlab};
-use hashbrown::HashSet;
+use crate::{NAME_POOL, SlabIndex, cache::FileNodes};
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, time::Instant};
+use thin_vec::ThinVec;
 use tracing::info;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct SortedSlabIndices {
+    indices: ThinVec<SlabIndex>,
+}
+
+impl SortedSlabIndices {
+    pub fn new(index: SlabIndex) -> Self {
+        Self {
+            indices: ThinVec::from_iter([index]),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.indices.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &SlabIndex> {
+        self.indices.iter()
+    }
+
+    pub fn insert(&mut self, index: SlabIndex, slab: &FileNodes) {
+        let Some(target_path) = slab.node_path(index) else {
+            return;
+        };
+        if let Err(pos) = self.indices.binary_search_by(|existing| {
+            slab.node_path(*existing)
+                .expect("node in name index must resolve to a path")
+                .cmp(&target_path)
+        }) {
+            self.indices.insert(pos, index);
+        }
+    }
+
+    /// # Safety
+    ///
+    /// The index must be inserted with it's full path ordered.
+    pub unsafe fn insert_ordered(&mut self, index: SlabIndex) {
+        self.indices.push(index);
+    }
+
+    pub fn remove(&mut self, index: SlabIndex) -> bool {
+        if let Some(pos) = self.indices.iter().position(|&existing| existing == index) {
+            self.indices.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct NameIndex {
-    map: BTreeMap<&'static str, HashSet<SlabIndex>>,
+    map: BTreeMap<&'static str, SortedSlabIndices>,
 }
 
 impl NameIndex {
-    pub fn new(map: BTreeMap<&'static str, HashSet<SlabIndex>>) -> Self {
-        Self { map }
-    }
-
     pub fn len(&self) -> usize {
         self.map.len()
     }
@@ -28,26 +81,34 @@ impl NameIndex {
             .collect()
     }
 
-    pub fn get(&self, name: &str) -> Option<&HashSet<SlabIndex>> {
+    pub fn get(&self, name: &str) -> Option<&SortedSlabIndices> {
         self.map.get(name)
     }
 
-    pub fn get_mut(&mut self, name: &str) -> Option<&mut HashSet<SlabIndex>> {
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut SortedSlabIndices> {
         self.map.get_mut(name)
     }
 
-    pub fn insert_owned(&mut self, name: &'static str, indices: HashSet<SlabIndex>) {
-        self.map.insert(name, indices);
+    /// # Safety
+    ///
+    /// The index must be inserted with it's full path ordered.
+    pub unsafe fn add_index_ordered(&mut self, name: &str, index: SlabIndex) {
+        if let Some(existing) = self.map.get_mut(name) {
+            unsafe {
+                existing.insert_ordered(index);
+            }
+        } else {
+            let interned = NAME_POOL.push(name);
+            self.map.insert(interned, SortedSlabIndices::new(index));
+        }
     }
 
-    pub fn add_index(&mut self, name: &str, index: SlabIndex) {
+    pub fn add_index(&mut self, name: &str, index: SlabIndex, slab: &FileNodes) {
         if let Some(existing) = self.map.get_mut(name) {
-            existing.insert(index);
+            existing.insert(index, slab);
         } else {
-            let mut indices = HashSet::with_capacity(1);
-            indices.insert(index);
             let interned = NAME_POOL.push(name);
-            self.map.insert(interned, indices);
+            self.map.insert(interned, SortedSlabIndices::new(index));
         }
     }
 
@@ -55,25 +116,25 @@ impl NameIndex {
         let Some(indices) = self.map.get_mut(name) else {
             return false;
         };
-        let existed = indices.remove(&index);
+        let removed = indices.remove(index);
         if indices.is_empty() {
             self.map.remove(name);
         }
-        existed
+        removed
     }
 
-    pub fn remove(&mut self, name: &str) -> Option<HashSet<SlabIndex>> {
+    pub fn remove(&mut self, name: &str) -> Option<SortedSlabIndices> {
         self.map.remove(name)
     }
 
-    pub fn into_persistent(self) -> BTreeMap<Box<str>, HashSet<SlabIndex>> {
+    pub fn into_persistent(self) -> BTreeMap<Box<str>, SortedSlabIndices> {
         self.map
             .into_iter()
             .map(|(name, indices)| (name.to_string().into_boxed_str(), indices))
             .collect()
     }
 
-    pub fn construct_name_pool(data: BTreeMap<Box<str>, HashSet<SlabIndex>>) -> Self {
+    pub fn construct_name_pool(data: BTreeMap<Box<str>, SortedSlabIndices>) -> Self {
         let name_pool_time = Instant::now();
         let mut map = BTreeMap::new();
         for (name, indices) in data {
@@ -86,20 +147,5 @@ impl NameIndex {
             NAME_POOL.len(),
         );
         Self { map }
-    }
-
-    pub fn from_slab(slab: &ThinSlab<SlabNode>) -> Self {
-        let mut name_index = NameIndex::default();
-        // The slab is newly constructed, thus though slab.iter() iterates all slots, it won't waste too much.
-        slab.iter().for_each(|(i, node)| {
-            if let Some(nodes) = name_index.get_mut(node.name_and_parent.as_str()) {
-                nodes.insert(i);
-            } else {
-                let mut nodes = HashSet::with_capacity(1);
-                nodes.insert(i);
-                name_index.map.insert(node.name_and_parent.as_str(), nodes);
-            };
-        });
-        name_index
     }
 }

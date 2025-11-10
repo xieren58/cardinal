@@ -224,6 +224,8 @@ fn walk(path: &Path, walk_data: &WalkData) -> Option<Node> {
         .file_name()
         .map(|x| x.to_string_lossy().into_owned().into_boxed_str())
         .unwrap_or_default();
+    let mut children = children;
+    children.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     Some(Node {
         children,
         name,

@@ -1,6 +1,5 @@
-use crate::{SlabIndex, SlabNode, ThinSlab};
+use crate::{SlabIndex, SlabNode, ThinSlab, name_index::SortedSlabIndices};
 use anyhow::{Context, Result};
-use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -25,9 +24,7 @@ pub struct PersistentStorage {
     /// Root index of the slab
     pub slab_root: SlabIndex,
     pub slab: ThinSlab<SlabNode>,
-    // TODO(ldm0): consider using a more compact structure to replace the hashset, mostly hashset only contains one element
-    // for each name, maybe we can use a vec and dedup it when querying
-    pub name_index: BTreeMap<Box<str>, HashSet<SlabIndex>>,
+    pub name_index: BTreeMap<Box<str>, SortedSlabIndices>,
 }
 
 pub fn read_cache_from_file(path: &Path) -> Result<PersistentStorage> {
