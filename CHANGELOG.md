@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.6 — 2025-11-11
+- Further optimized search execution and reorganized the search cache for faster lookups.
+
 ## 0.1.5 — 2025-11-09
 - search-cache: widen `NameAndParent` filename length tracking from `u8` to `u32` to handle very long paths without truncation or panic.
 
