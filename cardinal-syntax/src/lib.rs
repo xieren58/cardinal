@@ -21,36 +21,7 @@ use std::fmt;
 
 /// Parses an Everything-like query string into a structured expression tree.
 pub fn parse_query(input: &str) -> Result<Query, ParseError> {
-    if let Some(result) = try_parse_regex_query(input) {
-        return result;
-    }
-
     Parser::new(input).parse()
-}
-
-fn try_parse_regex_query(input: &str) -> Option<Result<Query, ParseError>> {
-    let trimmed = input.trim_start();
-    const PREFIX: &str = "regex:";
-    if trimmed.len() < PREFIX.len() {
-        return None;
-    }
-    if !trimmed[..PREFIX.len()].eq_ignore_ascii_case(PREFIX) {
-        return None;
-    }
-
-    let offset = input.len() - trimmed.len();
-    let pattern_start = offset + PREFIX.len();
-    let pattern = trimmed[PREFIX.len()..].trim();
-    if pattern.is_empty() {
-        return Some(Err(ParseError {
-            message: "regex: requires a pattern".into(),
-            position: pattern_start,
-        }));
-    }
-
-    Some(Ok(Query {
-        expr: Expr::Term(Term::Regex(pattern.to_string())),
-    }))
 }
 
 /// User input normalized into a single expression tree.
@@ -850,17 +821,68 @@ impl<'a> Parser<'a> {
     // switches the entire query into regex mode) or a normal filter.
     fn parse_filter_term(&mut self, name: String) -> Result<Term, ParseError> {
         if name.eq_ignore_ascii_case("regex") {
-            let pattern = self.input[self.pos..].trim();
-            if pattern.is_empty() {
-                return Err(self.error("regex: requires a pattern"));
-            }
-            self.pos = self.input.len();
-            return Ok(Term::Regex(pattern.to_string()));
+            let pattern = self.parse_regex_pattern()?;
+            return Ok(Term::Regex(pattern));
         }
 
         let kind = FilterKind::from_name(&name);
         let argument = self.parse_filter_argument(&kind)?;
         Ok(Term::Filter(Filter { kind, argument }))
+    }
+
+    fn parse_regex_pattern(&mut self) -> Result<String, ParseError> {
+        self.skip_ws();
+        if self.eof() || self.is_at_group_close() {
+            return Err(self.error("regex: requires a pattern"));
+        }
+
+        if self.peek_char() == Some('"') {
+            return self.parse_phrase_string();
+        }
+
+        let mut pattern = String::new();
+        let mut escaped = false;
+        let mut paren_depth = 0;
+        let mut bracket_depth = 0;
+        while let Some(ch) = self.peek_char() {
+            if !escaped {
+                if ch == '\\' {
+                    escaped = true;
+                    pattern.push(ch);
+                    self.advance_char();
+                    continue;
+                }
+
+                match ch {
+                    '[' => bracket_depth += 1,
+                    ']' if bracket_depth > 0 => bracket_depth -= 1,
+                    '(' if bracket_depth == 0 => paren_depth += 1,
+                    ')' if bracket_depth == 0 => {
+                        if paren_depth > 0 {
+                            paren_depth -= 1;
+                        } else if self.current_closer_is(ch) {
+                            break;
+                        }
+                    }
+                    ch if ch.is_whitespace() && bracket_depth == 0 => break,
+                    ch if self.current_closer_is(ch) && bracket_depth == 0 && paren_depth == 0 => {
+                        break;
+                    }
+                    _ => {}
+                }
+            } else {
+                escaped = false;
+            }
+
+            pattern.push(ch);
+            self.advance_char();
+        }
+
+        if pattern.is_empty() {
+            return Err(self.error("regex: requires a pattern"));
+        }
+
+        Ok(pattern)
     }
 
     // Extracts the argument immediately following `name:`. This function is
