@@ -173,5 +173,26 @@ mod tests {
                 Segment::Exact("string")
             ]
         );
+
+        // Two segments no leading/trailing slash => suffix + prefix
+        assert_eq!(
+            query_segmentation("foo/bar"),
+            vec![Segment::Suffix("foo"), Segment::Prefix("bar")]
+        );
+        // Two segments trailing slash => suffix + exact
+        assert_eq!(
+            query_segmentation("foo/bar/"),
+            vec![Segment::Suffix("foo"), Segment::Exact("bar")]
+        );
+        // Two segments leading slash => exact + prefix
+        assert_eq!(
+            query_segmentation("/foo/bar"),
+            vec![Segment::Exact("foo"), Segment::Prefix("bar")]
+        );
+        // Unicode segments
+        assert_eq!(
+            query_segmentation("/报告/测试/"),
+            vec![Segment::Exact("报告"), Segment::Exact("测试")]
+        );
     }
 }

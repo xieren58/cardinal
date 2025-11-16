@@ -29,6 +29,7 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
     Unknown,
     File,
