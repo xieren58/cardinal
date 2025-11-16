@@ -7,7 +7,9 @@ use base64::{Engine as _, engine::general_purpose};
 use cardinal_sdk::{EventFlag, EventWatcher};
 use crossbeam_channel::{Receiver, Sender};
 use rayon::spawn;
-use search_cache::{HandleFSEError, SearchCache, SearchOptions, SearchResultNode, SlabIndex};
+use search_cache::{
+    HandleFSEError, SearchCache, SearchOptions, SearchOutcome, SearchResultNode, SlabIndex,
+};
 use serde::Serialize;
 use std::{
     path::PathBuf,
@@ -34,7 +36,7 @@ pub struct IconPayload {
 pub struct BackgroundLoopChannels {
     pub finish_rx: Receiver<Sender<Option<SearchCache>>>,
     pub search_rx: Receiver<SearchJob>,
-    pub result_tx: Sender<Result<Option<Vec<SlabIndex>>>>,
+    pub result_tx: Sender<Result<SearchOutcome>>,
     pub node_info_rx: Receiver<Vec<SlabIndex>>,
     pub node_info_results_tx: Sender<Vec<SearchResultNode>>,
     pub icon_viewport_rx: Receiver<(u64, Vec<SlabIndex>)>,
@@ -108,16 +110,8 @@ pub fn run_background_event_loop(
                     cancellation_token,
                 } = job.expect("Search channel closed");
                 let opts = SearchOptions::from(options);
-                let result = if query.is_empty() {
-                    Ok(cache.search_empty(cancellation_token))
-                } else {
-                    cache.search_with_options(
-                        &query,
-                        opts,
-                        cancellation_token,
-                    )
-                };
-                result_tx.send(result).expect("Failed to send result");
+                let payload = cache.search_with_options(&query, opts, cancellation_token);
+                result_tx.send(payload).expect("Failed to send result");
             }
             recv(node_info_rx) -> results => {
                 let results = results.expect("Node info channel closed");

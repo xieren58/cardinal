@@ -45,6 +45,7 @@ function App() {
     scannedFiles,
     processedEvents,
     currentQuery,
+    highlightTerms,
     showLoadingUI,
     initialFetchCompleted,
     durationMs,
@@ -494,11 +495,11 @@ function App() {
         onContextMenu={(event, path) => handleRowContextMenu(event, path, rowIndex)}
         onSelect={(path) => handleRowSelect(path, rowIndex)}
         isSelected={selectedIndex === rowIndex}
-        searchQuery={currentQuery}
         caseInsensitive={!caseSensitive}
+        highlightTerms={highlightTerms}
       />
     ),
-    [handleRowContextMenu, handleRowSelect, selectedIndex, currentQuery, caseSensitive],
+    [handleRowContextMenu, handleRowSelect, selectedIndex, caseSensitive, highlightTerms],
   );
 
   const getDisplayState = (): 'loading' | 'error' | 'empty' | 'results' => {

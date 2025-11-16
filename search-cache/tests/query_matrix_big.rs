@@ -167,6 +167,7 @@ fn case_insensitive_option_matrix() {
     let insensitive = cache
         .search_with_options("readme.md", opts, CancellationToken::noop())
         .unwrap()
+        .nodes
         .unwrap()
         .len();
     let opts = SearchOptions {
@@ -175,6 +176,7 @@ fn case_insensitive_option_matrix() {
     let sensitive = cache
         .search_with_options("readme.md", opts, CancellationToken::noop())
         .unwrap()
+        .nodes
         .unwrap()
         .len();
     assert!(insensitive >= sensitive);
@@ -185,9 +187,11 @@ fn cancellation_large_iteration() {
     let cache = build_cache();
     let token = CancellationToken::new(9999);
     let _later = CancellationToken::new(10000); // cancel token
-    let result = cache.search_with_options("src lib tests", SearchOptions::default(), token);
+    let result = cache
+        .search_with_options("src lib tests", SearchOptions::default(), token)
+        .unwrap();
     assert!(
-        matches!(result, Ok(None)),
+        result.nodes.is_none(),
         "Cancellation should propagate and yield None"
     );
 }

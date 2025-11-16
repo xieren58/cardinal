@@ -11,34 +11,66 @@ type SplitOptions = {
   caseInsensitive?: boolean;
 };
 
-export function splitTextWithHighlight(
+export function splitTextWithHighlights(
   text: string,
-  searchTerm: string | undefined,
+  searchTerms: readonly string[] | undefined,
   options: SplitOptions = {},
 ): HighlightSegment[] {
   const { caseInsensitive = false } = options;
-  if (!searchTerm) return [{ text, isHighlight: false }];
+  if (!text) return [];
 
-  const haystack = caseInsensitive ? text.toLocaleLowerCase() : text;
-  const needle = caseInsensitive ? searchTerm.toLocaleLowerCase() : searchTerm;
-  if (!needle.length) return [{ text, isHighlight: false }];
+  const needles = (searchTerms ?? [])
+    .map((term) => term?.trim())
+    .filter((term): term is string => Boolean(term))
+    .map((term) => (caseInsensitive ? term.toLocaleLowerCase() : term));
 
-  const parts: HighlightSegment[] = [];
-  let startIndex = 0;
-  let matchIndex: number;
-
-  while ((matchIndex = haystack.indexOf(needle, startIndex)) !== -1) {
-    if (matchIndex > startIndex) {
-      parts.push({ text: text.slice(startIndex, matchIndex), isHighlight: false });
-    }
-
-    const matchEnd = matchIndex + needle.length;
-    parts.push({ text: text.slice(matchIndex, matchEnd), isHighlight: true });
-    startIndex = matchEnd;
+  if (needles.length === 0) {
+    return [{ text, isHighlight: false }];
   }
 
-  if (startIndex < text.length) {
-    parts.push({ text: text.slice(startIndex), isHighlight: false });
+  const haystack = caseInsensitive ? text.toLocaleLowerCase() : text;
+  const highlightMask = Array<boolean>(text.length).fill(false);
+  for (const needle of needles) {
+    if (!needle.length) continue;
+    let searchIndex = 0;
+    while (searchIndex <= haystack.length) {
+      const matchIndex = haystack.indexOf(needle, searchIndex);
+      if (matchIndex === -1) break;
+      for (let offset = 0; offset < needle.length; offset++) {
+        highlightMask[matchIndex + offset] = true;
+      }
+      searchIndex = matchIndex + needle.length;
+    }
+  }
+
+  if (!highlightMask.some(Boolean)) {
+    return [{ text, isHighlight: false }];
+  }
+
+  const parts: HighlightSegment[] = [];
+  let segmentStart = 0;
+  let segmentState = Boolean(highlightMask[0]);
+
+  for (let index = 1; index < text.length; index++) {
+    const nextState = Boolean(highlightMask[index]);
+    if (nextState === segmentState) {
+      continue;
+    }
+    if (index > segmentStart) {
+      parts.push({
+        text: text.slice(segmentStart, index),
+        isHighlight: segmentState,
+      });
+    }
+    segmentStart = index;
+    segmentState = nextState;
+  }
+
+  if (segmentStart < text.length) {
+    parts.push({
+      text: text.slice(segmentStart),
+      isHighlight: segmentState,
+    });
   }
 
   return parts;
@@ -102,14 +134,14 @@ function applyMiddleEllipsis(parts: HighlightSegment[], maxChars: number): Highl
 type MiddleEllipsisHighlightProps = {
   text: string;
   className?: string;
-  highlightTerm?: string;
+  highlightTerms?: readonly string[];
   caseInsensitive?: boolean;
 };
 
 export function MiddleEllipsisHighlight({
   text,
   className,
-  highlightTerm,
+  highlightTerms,
   caseInsensitive,
 }: MiddleEllipsisHighlightProps): React.JSX.Element {
   const containerRef = useRef<HTMLSpanElement | null>(null);
@@ -117,8 +149,8 @@ export function MiddleEllipsisHighlight({
 
   // Break the string into highlight + non-highlight chunks only when inputs change.
   const highlightedParts = useMemo(() => {
-    return text ? splitTextWithHighlight(text, highlightTerm, { caseInsensitive }) : [];
-  }, [text, highlightTerm, caseInsensitive]);
+    return text ? splitTextWithHighlights(text, highlightTerms, { caseInsensitive }) : [];
+  }, [text, highlightTerms, caseInsensitive]);
 
   // Replace the middle of the string with an ellipsis so we preserve both ends.
   const displayParts = useMemo(() => {

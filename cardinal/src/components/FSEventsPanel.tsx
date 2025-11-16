@@ -95,7 +95,7 @@ const EventRowBase = ({
         <MiddleEllipsisHighlight
           text={name || '—'}
           className="event-name-text"
-          highlightTerm={searchQuery}
+          highlightTerms={searchQuery ? [searchQuery] : undefined}
           caseInsensitive={caseInsensitive}
         />
       </div>

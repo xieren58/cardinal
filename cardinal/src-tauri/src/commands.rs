@@ -5,7 +5,7 @@ use crate::{
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
 use crossbeam_channel::{Receiver, Sender};
-use search_cache::{SearchOptions, SearchResultNode, SlabIndex, SlabNodeMetadata};
+use search_cache::{SearchOptions, SearchOutcome, SearchResultNode, SlabIndex, SlabNodeMetadata};
 use search_cancel::CancellationToken;
 use serde::{Deserialize, Serialize};
 use std::{process::Command, sync::atomic::Ordering};
@@ -34,7 +34,7 @@ pub struct SearchJob {
 
 pub struct SearchState {
     search_tx: Sender<SearchJob>,
-    result_rx: Receiver<Result<Option<Vec<SlabIndex>>>>,
+    result_rx: Receiver<Result<SearchOutcome>>,
 
     node_info_tx: Sender<Vec<SlabIndex>>,
     node_info_results_rx: Receiver<Vec<SearchResultNode>>,
@@ -47,7 +47,7 @@ impl SearchState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         search_tx: Sender<SearchJob>,
-        result_rx: Receiver<Result<Option<Vec<SlabIndex>>>>,
+        result_rx: Receiver<Result<SearchOutcome>>,
         node_info_tx: Sender<Vec<SlabIndex>>,
         node_info_results_rx: Receiver<Vec<SearchResultNode>>,
         icon_viewport_tx: Sender<(u64, Vec<SlabIndex>)>,
@@ -69,6 +69,12 @@ pub struct NodeInfo {
     pub path: String,
     pub metadata: Option<NodeInfoMetadata>,
     pub icon: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SearchResponse {
+    pub results: Vec<SlabIndex>,
+    pub highlights: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -96,7 +102,7 @@ pub async fn search(
     options: Option<SearchOptionsPayload>,
     version: u64,
     state: State<'_, SearchState>,
-) -> Result<Vec<SlabIndex>, String> {
+) -> Result<SearchResponse, String> {
     let options = options.unwrap_or_default();
     let cancellation_token = CancellationToken::new(version);
     state
@@ -113,10 +119,18 @@ pub async fn search(
         .recv()
         .map_err(|e| format!("Failed to receive search result: {e:?}"))?
         .map(|res| {
-            if res.is_none() {
-                info!("Search {version} was cancelled");
+            let SearchOutcome { nodes, highlights } = res;
+            let results = match nodes {
+                Some(list) => list,
+                None => {
+                    info!("Search {version} was cancelled");
+                    Vec::new()
+                }
+            };
+            SearchResponse {
+                results,
+                highlights,
             }
-            res.unwrap_or_default()
         });
 
     search_result.map_err(|e| format!("Failed to process search result: {e:?}"))

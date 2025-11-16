@@ -23,3 +23,8 @@ export type RecentEventPayload = {
 };
 
 export type AppLifecycleStatus = 'Initializing' | 'Updating' | 'Ready';
+
+export type SearchResponsePayload = {
+  results: number[];
+  highlights?: string[];
+};

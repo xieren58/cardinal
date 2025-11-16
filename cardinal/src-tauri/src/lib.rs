@@ -17,7 +17,7 @@ use lifecycle::{
     APP_QUIT, AppLifecycleState, EXIT_REQUESTED, emit_app_state, load_app_state, update_app_state,
 };
 use once_cell::sync::OnceCell;
-use search_cache::{SearchCache, SearchResultNode, SlabIndex, WalkData};
+use search_cache::{SearchCache, SearchOutcome, SearchResultNode, SlabIndex, WalkData};
 use std::{
     path::PathBuf,
     sync::{
@@ -55,7 +55,7 @@ pub fn run() -> Result<()> {
 
     let (finish_tx, finish_rx) = bounded::<Sender<Option<SearchCache>>>(1);
     let (search_tx, search_rx) = unbounded::<SearchJob>();
-    let (result_tx, result_rx) = unbounded::<Result<Option<Vec<SlabIndex>>>>();
+    let (result_tx, result_rx) = unbounded::<Result<SearchOutcome>>();
     let (node_info_tx, node_info_rx) = unbounded::<Vec<SlabIndex>>();
     let (node_info_results_tx, node_info_results_rx) = unbounded::<Vec<SearchResultNode>>();
     let (icon_viewport_tx, icon_viewport_rx) = unbounded::<(u64, Vec<SlabIndex>)>();

@@ -1,6 +1,7 @@
 #![feature(str_from_raw_parts)]
 mod cache;
 mod file_nodes;
+mod highlight;
 mod metadata_cache;
 mod name_index;
 mod persistent;

@@ -1,6 +1,7 @@
 use crate::{
     FileNodes, NameIndex, SearchOptions, SearchResultNode, SlabIndex, SlabNode,
     SlabNodeMetadataCompact, State, ThinSlab,
+    highlight::derive_highlight_terms,
     persistent::{PersistentStorage, read_cache_from_file, write_cache_to_file},
 };
 use anyhow::{Context, Result, anyhow};
@@ -27,6 +28,18 @@ pub struct SearchCache {
     pub(crate) name_index: NameIndex,
     ignore_paths: Option<Vec<PathBuf>>,
     stop: Option<&'static AtomicBool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchOutcome {
+    pub nodes: Option<Vec<SlabIndex>>,
+    pub highlights: Vec<String>,
+}
+
+impl SearchOutcome {
+    fn new(nodes: Option<Vec<SlabIndex>>, highlights: Vec<String>) -> Self {
+        Self { nodes, highlights }
+    }
 }
 
 impl std::fmt::Debug for SearchCache {
@@ -177,7 +190,7 @@ impl SearchCache {
     #[cfg(test)]
     pub fn search(&self, line: &str) -> Result<Vec<SlabIndex>> {
         self.search_with_options(line, SearchOptions::default(), CancellationToken::noop())
-            .map(|x| x.unwrap_or_default())
+            .map(|outcome| outcome.nodes.unwrap_or_default())
     }
 
     pub fn search_with_options(
@@ -185,12 +198,13 @@ impl SearchCache {
         line: &str,
         options: SearchOptions,
         cancellation_token: CancellationToken,
-    ) -> Result<Option<Vec<SlabIndex>>> {
+    ) -> Result<SearchOutcome> {
         let parsed = parse_query(line).map_err(|err| anyhow!("Failed to parse query: {err}"))?;
+        let highlights = derive_highlight_terms(&parsed.expr);
         let search_time = Instant::now();
         let result = self.evaluate_expr(&parsed.expr, options, cancellation_token);
         info!("Search time: {:?}", search_time.elapsed());
-        result
+        result.map(|nodes| SearchOutcome::new(nodes, highlights))
     }
 
     /// Get the path of the node in the slab.
@@ -443,7 +457,11 @@ impl SearchCache {
         cancellation_token: CancellationToken,
     ) -> Result<Option<Vec<SearchResultNode>>> {
         self.search_with_options(&query, options, cancellation_token)
-            .map(|nodes| nodes.map(|nodes| self.expand_file_nodes_inner::<false>(&nodes)))
+            .map(|outcome| {
+                outcome
+                    .nodes
+                    .map(|nodes| self.expand_file_nodes_inner::<false>(&nodes))
+            })
     }
 
     /// Returns a node info vector with the same length as the input nodes.
@@ -678,9 +696,10 @@ mod tests {
     use std::{fs, path::PathBuf};
     use tempdir::TempDir;
 
-    fn guard_indices(result: Result<Option<Vec<SlabIndex>>>) -> Vec<SlabIndex> {
+    fn guard_indices(result: Result<SearchOutcome>) -> Vec<SlabIndex> {
         result
             .expect("search should succeed")
+            .nodes
             .expect("noop cancellation token should not cancel")
     }
 
@@ -945,7 +964,7 @@ mod tests {
             },
             token,
         );
-        assert!(matches!(result, Ok(None)));
+        assert!(matches!(result, Ok(SearchOutcome { nodes: None, .. })));
     }
 
     #[test]
@@ -1034,7 +1053,7 @@ mod tests {
             },
             token,
         );
-        assert!(matches!(result, Ok(None)));
+        assert!(matches!(result, Ok(SearchOutcome { nodes: None, .. })));
     }
 
     #[test]

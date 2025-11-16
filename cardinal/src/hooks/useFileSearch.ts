@@ -2,7 +2,7 @@ import { useReducer, useRef, useCallback, useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { SEARCH_DEBOUNCE_MS } from '../constants';
-import type { AppLifecycleStatus } from '../types/ipc';
+import type { AppLifecycleStatus, SearchResponsePayload } from '../types/ipc';
 import type { SlabIndex } from '../types/slab';
 import { toSlabIndexArray } from '../types/slab';
 
@@ -13,6 +13,7 @@ type SearchState = {
   scannedFiles: number;
   processedEvents: number;
   currentQuery: string;
+  highlightTerms: string[];
   showLoadingUI: boolean;
   initialFetchCompleted: boolean;
   durationMs: number | null;
@@ -37,6 +38,7 @@ type SearchAction =
         query: string;
         duration: number;
         count: number;
+        highlightTerms: string[];
       };
     }
   | {
@@ -53,6 +55,7 @@ const initialSearchState: SearchState = {
   scannedFiles: 0,
   processedEvents: 0,
   currentQuery: '',
+  highlightTerms: [],
   showLoadingUI: false,
   initialFetchCompleted: false,
   durationMs: null,
@@ -98,6 +101,7 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         ...state,
         results: action.payload.results,
         currentQuery: action.payload.query,
+        highlightTerms: action.payload.highlightTerms,
         showLoadingUI: false,
         initialFetchCompleted: true,
         durationMs: action.payload.duration,
@@ -112,6 +116,7 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         initialFetchCompleted: true,
         durationMs: action.payload.duration,
         resultCount: 0,
+        highlightTerms: [],
       };
     case 'SET_LIFECYCLE_STATE':
       return {
@@ -211,7 +216,7 @@ export function useFileSearch(): UseFileSearchResult {
     }
 
     try {
-      const rawResults = await invoke<number[]>('search', {
+      const rawResults = await invoke<SearchResponsePayload>('search', {
         query,
         options: {
           caseInsensitive: !caseSensitive,
@@ -219,7 +224,11 @@ export function useFileSearch(): UseFileSearchResult {
         version: requestVersion,
       });
 
-      const searchResults = Array.isArray(rawResults) ? toSlabIndexArray(rawResults) : [];
+      const slabResults = Array.isArray(rawResults?.results) ? rawResults.results : [];
+      const searchResults = toSlabIndexArray(slabResults);
+      const highlightTerms = Array.isArray(rawResults?.highlights)
+        ? rawResults.highlights.filter((term): term is string => typeof term === 'string')
+        : [];
 
       if (searchVersionRef.current !== requestVersion) {
         return;
@@ -237,6 +246,7 @@ export function useFileSearch(): UseFileSearchResult {
           query: trimmedQuery,
           duration,
           count: searchResults.length,
+          highlightTerms,
         },
       });
     } catch (error) {

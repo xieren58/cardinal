@@ -1,10 +1,8 @@
-import React, { useMemo, memo } from 'react';
+import React, { memo } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { MiddleEllipsisHighlight } from './MiddleEllipsisHighlight';
 import { formatKB, formatTimestamp } from '../utils/format';
 import type { SearchResultItem } from '../types/search';
-
-const SEGMENT_SEPARATOR = /[\\/]+/;
 
 type FileRowProps = {
   item?: SearchResultItem;
@@ -13,18 +11,9 @@ type FileRowProps = {
   onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>, path: string, rowIndex: number) => void;
   onSelect?: (path: string, rowIndex: number) => void;
   isSelected?: boolean;
-  searchQuery?: string;
   caseInsensitive?: boolean;
+  highlightTerms?: readonly string[];
 };
-
-function deriveHighlightTerm(query?: string): string {
-  if (!query) return '';
-  const segments = query.split(SEGMENT_SEPARATOR).filter(Boolean);
-  if (segments.length === 0) {
-    return query.trim();
-  }
-  return segments[segments.length - 1].trim();
-}
 
 export const FileRow = memo(function FileRow({
   item,
@@ -33,11 +22,9 @@ export const FileRow = memo(function FileRow({
   onContextMenu,
   onSelect,
   isSelected = false,
-  searchQuery,
   caseInsensitive,
+  highlightTerms,
 }: FileRowProps): React.JSX.Element | null {
-  const highlightTerm = useMemo(() => deriveHighlightTerm(searchQuery), [searchQuery]);
-
   if (!item) {
     return null;
   }
@@ -105,7 +92,7 @@ export const FileRow = memo(function FileRow({
         <MiddleEllipsisHighlight
           className="filename-text"
           text={filename}
-          highlightTerm={highlightTerm}
+          highlightTerms={highlightTerms}
           caseInsensitive={caseInsensitive}
         />
       </div>
