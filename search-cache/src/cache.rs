@@ -26,7 +26,7 @@ pub struct SearchCache {
     last_event_id: u64,
     pub(crate) name_index: NameIndex,
     ignore_paths: Option<Vec<PathBuf>>,
-    cancel: Option<&'static AtomicBool>,
+    stop: Option<&'static AtomicBool>,
 }
 
 impl std::fmt::Debug for SearchCache {
@@ -166,7 +166,7 @@ impl SearchCache {
             last_event_id,
             name_index,
             ignore_paths,
-            cancel,
+            stop: cancel,
         }
     }
 
@@ -311,7 +311,7 @@ impl SearchCache {
             self.remove_node(old_node);
         }
         // For incremental data, we need metadata
-        let walk_data = WalkData::new(self.ignore_paths.clone(), true, self.cancel);
+        let walk_data = WalkData::new(self.ignore_paths.clone(), true, self.stop);
         walk_it(raw_path, &walk_data).map(|node| {
             let node = self.create_node_slab_update_name_index_and_name_pool(Some(parent), &node);
             // Push the newly created node to the parent's children
@@ -337,7 +337,7 @@ impl SearchCache {
     }
 
     pub fn walk_data(&self) -> WalkData<'static> {
-        WalkData::new(self.ignore_paths.clone(), false, self.cancel)
+        WalkData::new(self.ignore_paths.clone(), false, self.stop)
     }
 
     pub fn rescan_with_walk_data(&mut self, walk_data: &WalkData) -> Option<()> {
@@ -345,7 +345,7 @@ impl SearchCache {
             self.file_nodes.path().to_path_buf(),
             walk_data,
             self.ignore_paths.clone(),
-            self.cancel,
+            self.stop,
         ) else {
             info!("Rescan cancelled.");
             return None;
@@ -358,9 +358,9 @@ impl SearchCache {
         // Remove all memory consuming cache early for memory consumption in Self::walk_fs_new.
         let Some(new_cache) = Self::walk_fs_with_walk_data(
             self.file_nodes.path().to_path_buf(),
-            &WalkData::new(self.ignore_paths.clone(), false, self.cancel),
+            &WalkData::new(self.ignore_paths.clone(), false, self.stop),
             self.ignore_paths.clone(),
-            self.cancel,
+            self.stop,
         ) else {
             info!("Rescan cancelled.");
             return;
@@ -396,7 +396,7 @@ impl SearchCache {
             last_event_id,
             name_index,
             ignore_paths: _,
-            cancel: _,
+            stop: _,
         } = self;
         let (path, slab_root, slab) = slab.into_parts();
         let name_index = name_index.into_persistent();

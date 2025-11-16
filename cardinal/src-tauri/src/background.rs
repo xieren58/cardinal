@@ -223,7 +223,7 @@ fn perform_rescan(
 
     let walk_data = cache.walk_data();
     let walking_done = AtomicBool::new(false);
-    std::thread::scope(|s| {
+    let stopped = std::thread::scope(|s| {
         s.spawn(|| {
             while !walking_done.load(Ordering::Relaxed) {
                 let dirs = walk_data.num_dirs.load(Ordering::Relaxed);
@@ -233,16 +233,22 @@ fn perform_rescan(
                 std::thread::sleep(Duration::from_millis(100));
             }
         });
-        cache.rescan_with_walk_data(&walk_data);
+        // If rescan is cancelled, we have nothing to do
+        let stopped = cache.rescan_with_walk_data(&walk_data).is_none();
         walking_done.store(true, Ordering::Relaxed);
+        stopped
     });
 
-    *event_watcher = EventWatcher::spawn(
-        watch_root.to_string(),
-        cache.last_event_id(),
-        fse_latency_secs,
-    )
-    .1;
+    *event_watcher = if stopped {
+        EventWatcher::noop()
+    } else {
+        EventWatcher::spawn(
+            watch_root.to_string(),
+            cache.last_event_id(),
+            fse_latency_secs,
+        )
+        .1
+    };
     update_app_state(app_handle, AppLifecycleState::Updating);
 }
 
