@@ -976,6 +976,37 @@ mod tests {
     }
 
     #[test]
+    fn test_wildcard_search_case_sensitivity() {
+        let temp_dir = TempDir::new("test_wildcard_search_case_sensitivity").unwrap();
+        let dir = temp_dir.path();
+
+        fs::File::create(dir.join("AlphaOne.md")).unwrap();
+        fs::File::create(dir.join("alphaTwo.md")).unwrap();
+        fs::File::create(dir.join("beta.txt")).unwrap();
+
+        let mut cache = SearchCache::walk_fs(dir.to_path_buf());
+
+        let opts = SearchOptions {
+            case_insensitive: false,
+        };
+        let indices =
+            guard_indices(cache.search_with_options("alpha*.md", opts, CancellationToken::noop()));
+        let nodes = cache.expand_file_nodes(&indices);
+        assert_eq!(nodes.len(), 1);
+        assert!(nodes[0].path.ends_with("alphaTwo.md"));
+
+        let opts = SearchOptions {
+            case_insensitive: true,
+        };
+        let indices =
+            guard_indices(cache.search_with_options("alpha*.md", opts, CancellationToken::noop()));
+        let nodes = cache.expand_file_nodes(&indices);
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().any(|node| node.path.ends_with("AlphaOne.md")));
+        assert!(nodes.iter().any(|node| node.path.ends_with("alphaTwo.md")));
+    }
+
+    #[test]
     fn test_search_empty_cancelled_returns_none() {
         let temp_dir = TempDir::new("search_empty_cancelled").unwrap();
         fs::File::create(temp_dir.path().join("alpha.txt")).unwrap();
