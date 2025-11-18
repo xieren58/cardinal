@@ -114,7 +114,11 @@ fn segment_value<'a>(segment: &'a Segment<'a>) -> &'a str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cardinal_syntax::parse_query;
+    use cardinal_syntax::{ParseError, Query, optimize_query, parse_query as raw_parse_query};
+
+    fn parse_query(input: &str) -> Result<Query, ParseError> {
+        raw_parse_query(input).map(optimize_query)
+    }
 
     // ============================================================================
     // Basic Word and Phrase Tests (200 lines)

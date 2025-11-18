@@ -4,12 +4,36 @@
 //! the rest of Cardinal can reason about filters, boolean logic, and phrases
 //! without duplicating the parsing rules from the original Windows tool. Any
 //! example shown in that manual should be accepted by [`parse_query`].
+//!
+//! ## Example
+//! ```
+//! use cardinal_syntax::{optimize_query, parse_query, Expr, FilterKind, Term};
+//!
+//! let parsed = parse_query("folder: dm:pastmonth ext:docx report").unwrap();
+//! if let Expr::And(parts) = &parsed.expr {
+//!     // parser preserves the original order
+//!     assert!(matches!(&parts[0], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Folder)));
+//!     assert!(matches!(&parts[1], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::DateModified)));
+//!     assert!(matches!(&parts[2], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Ext)));
+//!     assert!(matches!(&parts[3], Expr::Term(Term::Word(word)) if word == "report"));
+//! }
+//!
+//! let query = optimize_query(parsed);
+//! if let Expr::And(parts) = query.expr {
+//!     // optimizer pushes metadata filters to the end
+//!     assert_eq!(parts.len(), 4);
+//!     assert!(matches!(&parts[0], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Folder)));
+//!     assert!(matches!(&parts[1], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Ext)));
+//!     assert!(matches!(&parts[2], Expr::Term(Term::Word(word)) if word == "report"));
+//!     assert!(matches!(&parts[3], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::DateModified)));
+//! }
+//! ```
 
 use std::fmt;
 
 /// Parses an Everything-like query string into a structured expression tree.
 pub fn parse_query(input: &str) -> Result<Query, ParseError> {
-    Parser::new(input).parse().map(optimize_query)
+    Parser::new(input).parse()
 }
 
 /// User input normalized into a single expression tree.
@@ -24,7 +48,20 @@ impl Query {
     }
 }
 
-fn optimize_query(mut query: Query) -> Query {
+/// Applies deterministic rewrites that make downstream evaluation cheaper.
+///
+/// The optimizer is intentionally separate from [`parse_query`] so callers can
+/// choose whether they want the raw Everything AST or a normalized shape that:
+/// - Removes `Expr::Empty` operands from conjunctions (returning `Expr::Empty`
+///   or the lone operand when appropriate).
+/// - Moves slow metadata filters (`dm:` / `dc:`) to the tail of AND chains so
+///   cheaper terms run first.
+/// - Collapses any OR chain containing `Expr::Empty` into a single
+///   `Expr::Empty`, matching Cardinal's "empty means whole universe" semantics.
+///
+/// The function never mutates the input query in place; a new tree is returned
+/// so upstream caches can keep the parsed form if needed.
+pub fn optimize_query(mut query: Query) -> Query {
     query.expr = optimize_expr(query.expr);
     query
 }
@@ -38,6 +75,8 @@ fn optimize_expr(expr: Expr) -> Expr {
     }
 }
 
+/// Normalizes AND expressions by eliding `Expr::Empty`, flattening single-item
+/// conjunctions, and reordering metadata filters to the end of the chain.
 fn optimize_and(parts: Vec<Expr>) -> Expr {
     let mut parts: Vec<Expr> = parts
         .into_iter()
@@ -64,6 +103,10 @@ fn optimize_or(parts: Vec<Expr>) -> Expr {
     }
 }
 
+/// Reorders `dm:`/`dc:` filters to the end of `parts`.
+///
+/// Returns `true` when any movement was performed so future optimizations could
+/// skip redundant work.
 fn move_metadata_filters_to_tail(parts: &mut Vec<Expr>) -> bool {
     if parts.len() <= 1 {
         return false;
@@ -1430,13 +1473,13 @@ mod tests {
     #[test]
     fn parses_and_with_leading_empty_operand() {
         let query = parse_query("  AND foo").unwrap();
-        assert_eq!(query.expr, word("foo"));
+        assert_eq!(query.expr, Expr::And(vec![Expr::Empty, word("foo")]));
     }
 
     #[test]
     fn parses_and_with_trailing_empty_operand() {
         let query = parse_query("foo AND ").unwrap();
-        assert_eq!(query.expr, word("foo"));
+        assert_eq!(query.expr, Expr::And(vec![word("foo"), Expr::Empty]));
     }
 
     #[test]
@@ -1465,37 +1508,43 @@ mod tests {
     #[test]
     fn parses_or_with_trailing_empty_operand() {
         let query = parse_query("kksk | ").unwrap();
-        assert_eq!(query.expr, Expr::Empty);
+        assert_eq!(query.expr, Expr::Or(vec![word("kksk"), Expr::Empty]));
     }
 
     #[test]
     fn parses_or_with_only_empty_operands() {
         let query = parse_query(" | ").unwrap();
-        assert_eq!(query.expr, Expr::Empty);
+        assert_eq!(query.expr, Expr::Or(vec![Expr::Empty, Expr::Empty]));
     }
 
     #[test]
     fn parses_or_with_leading_empty_operand() {
         let query = parse_query("| foo").unwrap();
-        assert_eq!(query.expr, Expr::Empty);
+        assert_eq!(query.expr, Expr::Or(vec![Expr::Empty, word("foo")]));
     }
 
     #[test]
     fn parses_and_with_only_empty_operands() {
         let query = parse_query(" AND ").unwrap();
-        assert_eq!(query.expr, Expr::Empty);
+        assert_eq!(query.expr, Expr::And(vec![Expr::Empty, Expr::Empty]));
     }
 
     #[test]
     fn parses_or_with_consecutive_separators() {
         let query = parse_query("foo||bar").unwrap();
-        assert_eq!(query.expr, Expr::Empty);
+        assert_eq!(
+            query.expr,
+            Expr::Or(vec![word("foo"), Expr::Empty, word("bar")])
+        );
     }
 
     #[test]
     fn parses_or_with_empty_operands_on_both_sides() {
         let query = parse_query("| foo |").unwrap();
-        assert_eq!(query.expr, Expr::Empty);
+        assert_eq!(
+            query.expr,
+            Expr::Or(vec![Expr::Empty, word("foo"), Expr::Empty])
+        );
     }
 
     #[test]

@@ -4,6 +4,10 @@
 use cardinal_syntax::*;
 
 pub fn parse_ok(input: &str) -> Expr {
+    optimize_query(parse_query(input).unwrap()).expr
+}
+
+pub fn parse_raw(input: &str) -> Expr {
     parse_query(input).unwrap().expr
 }
 

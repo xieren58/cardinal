@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use cardinal_sdk::{EventFlag, FsEvent, ScanType, current_event_id};
-use cardinal_syntax::parse_query;
+use cardinal_syntax::{optimize_query, parse_query};
 use fswalk::{Node, NodeMetadata, WalkData, walk_it};
 use hashbrown::HashSet;
 use namepool::NamePool;
@@ -200,9 +200,10 @@ impl SearchCache {
         cancellation_token: CancellationToken,
     ) -> Result<SearchOutcome> {
         let parsed = parse_query(line).map_err(|err| anyhow!("Failed to parse query: {err}"))?;
-        let highlights = derive_highlight_terms(&parsed.expr);
+        let optimized = optimize_query(parsed);
+        let highlights = derive_highlight_terms(&optimized.expr);
         let search_time = Instant::now();
-        let result = self.evaluate_expr(&parsed.expr, options, cancellation_token);
+        let result = self.evaluate_expr(&optimized.expr, options, cancellation_token);
         info!("Search time: {:?}", search_time.elapsed());
         result.map(|nodes| SearchOutcome::new(nodes, highlights))
     }
