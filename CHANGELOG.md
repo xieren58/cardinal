@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.10 — 2025-11-19
+- Added new metadata filters (`dm:`, `dc:`, `type:`, `audio:`, `video:`, `doc:`, `exe:`, `size:`) for more precise searches.
+- Reworked the parser/optimizer pipeline to flatten redundant AND/OR groups, collapse empty expressions, and reorder metadata filters for faster searching.
+- Use the native context menu on right-click for a more consistent feel on macOS.
+
 ## 0.1.9 — 2025-11-17
 - Speedup `parent:` and `infolder:` filters.
 
