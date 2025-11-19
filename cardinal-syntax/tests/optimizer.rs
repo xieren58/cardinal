@@ -15,20 +15,21 @@ fn and_optimizer_returns_empty_when_all_operands_are_empty() {
 }
 
 #[test]
-fn metadata_filters_move_after_non_metadata_terms() {
-    let expr = parse_ok("dm:today foo dm:pastweek");
+fn filters_move_after_non_filter_terms() {
+    let expr = parse_ok("folder:src foo dm:pastweek ext:rs");
     let parts = as_and(&expr);
     word_is(&parts[0], "foo");
-    filter_is_kind(&parts[1], &FilterKind::DateModified);
+    filter_is_kind(&parts[1], &FilterKind::Folder);
     filter_is_kind(&parts[2], &FilterKind::DateModified);
+    filter_is_kind(&parts[3], &FilterKind::Ext);
 }
 
 #[test]
-fn metadata_filters_stay_in_place_when_already_at_tail() {
-    let expr = parse_ok("foo dm:today dm:pastweek");
+fn filters_stay_in_place_when_already_at_tail() {
+    let expr = parse_ok("foo folder:src dm:today");
     let parts = as_and(&expr);
     word_is(&parts[0], "foo");
-    filter_is_kind(&parts[1], &FilterKind::DateModified);
+    filter_is_kind(&parts[1], &FilterKind::Folder);
     filter_is_kind(&parts[2], &FilterKind::DateModified);
 }
 

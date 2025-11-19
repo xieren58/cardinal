@@ -84,19 +84,18 @@ fn filters_interleave_with_terms_and_groups() {
     // foo bar
     word_is(&parts[0], "foo");
     word_is(&parts[1], "bar");
-    // size:>1mb
-    filter_is_kind(&parts[2], &FilterKind::Size);
-    filter_arg_is_comparison(&parts[2], ComparisonOp::Gt, "1mb");
     // <D:|E:>
-    let or_parts = as_or(&parts[3]);
+    let or_parts = as_or(&parts[2]);
     assert_eq!(or_parts.len(), 2);
     filter_is_custom(&or_parts[0], "D");
     filter_is_custom(&or_parts[1], "E");
-    // ext:jpg;png
-    filter_is_kind(&parts[4], &FilterKind::Ext);
-    filter_arg_is_list(&parts[4], &["jpg", "png"]);
     // baz
-    word_is(&parts[5], "baz");
+    word_is(&parts[3], "baz");
+    // filters land at the tail
+    filter_is_kind(&parts[4], &FilterKind::Size);
+    filter_arg_is_comparison(&parts[4], ComparisonOp::Gt, "1mb");
+    filter_is_kind(&parts[5], &FilterKind::Ext);
+    filter_arg_is_list(&parts[5], &["jpg", "png"]);
 }
 
 #[test]

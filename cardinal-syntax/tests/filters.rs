@@ -60,31 +60,31 @@ fn phrase_argument_is_detected() {
 fn filter_can_appear_anywhere_in_and_chain() {
     let expr = parse_ok("video: size:>1gb report");
     let parts = as_and(&expr);
-    filter_is_kind(&parts[0], &FilterKind::Video);
-    filter_arg_none(&parts[0]);
-    filter_is_kind(&parts[1], &FilterKind::Size);
-    filter_arg_is_comparison(&parts[1], ComparisonOp::Gt, "1gb");
-    word_is(&parts[2], "report");
+    word_is(&parts[0], "report");
+    filter_is_kind(&parts[1], &FilterKind::Video);
+    filter_arg_none(&parts[1]);
+    filter_is_kind(&parts[2], &FilterKind::Size);
+    filter_arg_is_comparison(&parts[2], ComparisonOp::Gt, "1gb");
 }
 
 #[test]
-fn dm_and_dc_filters_are_moved_to_the_end_of_and_chain() {
+fn filters_are_moved_to_the_end_of_and_chain() {
     let expr = parse_ok("folder:projects dm:today report dc:thisweek");
     let parts = as_and(&expr);
-    filter_is_kind(&parts[0], &FilterKind::Folder);
-    filter_arg_raw(&parts[0], "projects");
-    word_is(&parts[1], "report");
+    word_is(&parts[0], "report");
+    filter_is_kind(&parts[1], &FilterKind::Folder);
+    filter_arg_raw(&parts[1], "projects");
     filter_is_kind(&parts[2], &FilterKind::DateModified);
     filter_is_kind(&parts[3], &FilterKind::DateCreated);
 }
 
 #[test]
-fn metadata_filters_preserve_relative_order() {
-    let expr = parse_ok("foo dc:thisweek bar dm:pastmonth dc:lastyear");
+fn filters_preserve_relative_order() {
+    let expr = parse_ok("foo dc:thisweek bar dm:pastmonth ext:rs");
     let parts = as_and(&expr);
     word_is(&parts[0], "foo");
     word_is(&parts[1], "bar");
     filter_is_kind(&parts[2], &FilterKind::DateCreated);
     filter_is_kind(&parts[3], &FilterKind::DateModified);
-    filter_is_kind(&parts[4], &FilterKind::DateCreated);
+    filter_is_kind(&parts[4], &FilterKind::Ext);
 }

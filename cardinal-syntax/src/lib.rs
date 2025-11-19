@@ -20,12 +20,12 @@
 //!
 //! let query = optimize_query(parsed);
 //! if let Expr::And(parts) = query.expr {
-//!     // optimizer pushes metadata filters to the end
+//!     // optimizer pushes all filters to the end
 //!     assert_eq!(parts.len(), 4);
-//!     assert!(matches!(&parts[0], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Folder)));
-//!     assert!(matches!(&parts[1], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Ext)));
-//!     assert!(matches!(&parts[2], Expr::Term(Term::Word(word)) if word == "report"));
-//!     assert!(matches!(&parts[3], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::DateModified)));
+//!     assert!(matches!(&parts[0], Expr::Term(Term::Word(word)) if word == "report"));
+//!     assert!(matches!(&parts[1], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Folder)));
+//!     assert!(matches!(&parts[2], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::DateModified)));
+//!     assert!(matches!(&parts[3], Expr::Term(Term::Filter(filter)) if matches!(filter.kind, FilterKind::Ext)));
 //! }
 //! ```
 
@@ -54,8 +54,8 @@ impl Query {
 /// choose whether they want the raw Everything AST or a normalized shape that:
 /// - Removes `Expr::Empty` operands from conjunctions (returning `Expr::Empty`
 ///   or the lone operand when appropriate).
-/// - Moves slow metadata filters (`dm:` / `dc:`) to the tail of AND chains so
-///   cheaper terms run first.
+/// - Moves all filters to the tail of AND chains so cheaper textual terms run
+///   first.
 /// - Collapses any OR chain containing `Expr::Empty` into a single
 ///   `Expr::Empty`, matching Cardinal's "empty means whole universe" semantics.
 ///
@@ -76,7 +76,7 @@ fn optimize_expr(expr: Expr) -> Expr {
 }
 
 /// Normalizes AND expressions by eliding `Expr::Empty`, flattening single-item
-/// conjunctions, and reordering metadata filters to the end of the chain.
+/// conjunctions, and reordering filters to the end of the chain.
 fn optimize_and(parts: Vec<Expr>) -> Expr {
     let mut flattened = Vec::new();
     for expr in parts.into_iter().map(optimize_expr) {
@@ -91,7 +91,7 @@ fn optimize_and(parts: Vec<Expr>) -> Expr {
         0 => Expr::Empty,
         1 => flattened.pop().unwrap(),
         _ => {
-            move_metadata_filters_to_tail(&mut flattened);
+            move_filters_to_tail(&mut flattened);
             Expr::And(flattened)
         }
     }
@@ -121,20 +121,20 @@ fn optimize_or(parts: Vec<Expr>) -> Expr {
     }
 }
 
-/// Reorders `dm:`/`dc:` filters to the end of `parts`.
+/// Reorders `filter:` terms to the end of `parts`.
 ///
 /// Returns `true` when any movement was performed so future optimizations could
 /// skip redundant work.
-fn move_metadata_filters_to_tail(parts: &mut Vec<Expr>) -> bool {
+fn move_filters_to_tail(parts: &mut Vec<Expr>) -> bool {
     if parts.len() <= 1 {
         return false;
     }
 
-    let Some(first) = parts.iter().position(is_metadata_filter) else {
+    let Some(first) = parts.iter().position(is_filter_term) else {
         return false;
     };
 
-    if parts[first..].iter().all(is_metadata_filter) {
+    if parts[first..].iter().all(is_filter_term) {
         return false;
     }
 
@@ -142,7 +142,7 @@ fn move_metadata_filters_to_tail(parts: &mut Vec<Expr>) -> bool {
     let mut metadata = Vec::new();
 
     for expr in parts.drain(..) {
-        if is_metadata_filter(&expr) {
+        if is_filter_term(&expr) {
             metadata.push(expr);
         } else {
             reordered.push(expr);
@@ -154,17 +154,8 @@ fn move_metadata_filters_to_tail(parts: &mut Vec<Expr>) -> bool {
     true
 }
 
-fn is_metadata_filter(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::Term(Term::Filter(Filter {
-            kind: FilterKind::DateModified,
-            ..
-        })) | Expr::Term(Term::Filter(Filter {
-            kind: FilterKind::DateCreated,
-            ..
-        }))
-    )
+fn is_filter_term(expr: &Expr) -> bool {
+    matches!(expr, Expr::Term(Term::Filter(_)))
 }
 
 /// Logical structure for Everything queries.
