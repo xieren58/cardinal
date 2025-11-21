@@ -8,7 +8,10 @@ type PreferencesOverlayProps = {
   onClose: () => void;
 };
 
-export function PreferencesOverlay({ open, onClose }: PreferencesOverlayProps): React.JSX.Element | null {
+export function PreferencesOverlay({
+  open,
+  onClose,
+}: PreferencesOverlayProps): React.JSX.Element | null {
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -37,7 +40,12 @@ export function PreferencesOverlay({ open, onClose }: PreferencesOverlayProps): 
   };
 
   return (
-    <div className="preferences-overlay" role="dialog" aria-modal="true" onClick={handleOverlayClick}>
+    <div
+      className="preferences-overlay"
+      role="dialog"
+      aria-modal="true"
+      onClick={handleOverlayClick}
+    >
       <div className="preferences-card">
         <header className="preferences-card__header">
           <div>
