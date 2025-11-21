@@ -925,6 +925,13 @@ button:active {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 
+.status-icon-svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  flex-shrink: 0;
+}
+
 .status-icon-button:hover:not(:disabled),
 .status-icon-button:focus-visible:not(:disabled) {
   background: rgba(248, 249, 252, 1);
