@@ -46,6 +46,7 @@ NOT > OR > AND, so group expressions (e.g., `good (*.mp3|*.wav)`) any time you w
 | `size:`             | Filter by file size with comparisons (`size:>1GB`), ranges (`size:1mb..10mb`), or keywords (`size:tiny`). |
 | `dm:` / `dc:`       | Date modified/created filters with keywords (`dm:today`, `dc:thisweek`) or ranges (`dm:2024/01/01-2024/12/31`). |
 | `regex:`            | Regular expressions (`regex:^README\..*`).                                                 |
+| `content:`          | Scan file contents for a plain substring: `*.md content:\"Bearer \"`, `*.rs content:TODO`, `ext:md content:\"API key\"`.|
 
 Keywords such as `today`, `yesterday`, `thisweek`, `lastweek`, `thismonth`, `lastmonth`, `thisyear`, `lastyear`, `pastweek`, `pastmonth`, and `pastyear` work inside `dm:` / `dc:` filters, and you can combine them with comparison operators (`dm:>=2024-01-01`) or explicit ranges.
 
@@ -54,6 +55,13 @@ Keywords such as `today`, `yesterday`, `thisweek`, `lastweek`, `thismonth`, `las
 - Boolean expressions still understand parentheses and angle brackets: group segments like `<src|tests> ext:rs`.
 - Use `!` to subtract results: `parent:/Users/demo/Documents !ext:pdf`.
 - Paths and escaped terms share the same syntax as in Everything, so snippets from existing docs typically paste right in.
+
+## Content Filter
+
+- Use `content:<text>` to return files whose contents include the given substring: `*.md content:"Bearer "`, `ext:md content:"API key"`.
+- Case sensitivity follows the UI toggle. When case-insensitive, the engine lowercases the needle and the scanned bytes; when case-sensitive it leaves bytes untouched.
+- The match is a raw substring search (no regex inside `content:`) across the whole file; multi-byte sequences can span read boundaries.
+- Combine with other filters to narrow scope (`infolder:/Users/demo Projects content:deadline`, `type:doc content:"Q4 budget"`). Empty needles are rejected.
 
 ## Examples
 

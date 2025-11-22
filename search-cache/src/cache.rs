@@ -724,7 +724,8 @@ pub static NAME_POOL: LazyLock<NamePool> = LazyLock::new(NamePool::new);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, path::PathBuf};
+    use crate::query::CONTENT_BUFFER_BYTES;
+    use std::{fs, iter, path::PathBuf};
     use tempdir::TempDir;
 
     fn guard_indices(result: Result<SearchOutcome>) -> Vec<SlabIndex> {
@@ -1054,6 +1055,168 @@ mod tests {
         assert_eq!(nodes.len(), 2);
         assert!(nodes.iter().any(|node| node.path.ends_with("AlphaOne.md")));
         assert!(nodes.iter().any(|node| node.path.ends_with("alphaTwo.md")));
+    }
+
+    #[test]
+    fn content_filter_matches_file_bodies() {
+        let temp_dir = TempDir::new("content_filter_matches_file_bodies").unwrap();
+        let dir = temp_dir.path();
+
+        fs::write(dir.join("notes.txt"), b"rust memchr finder\nsecond line").unwrap();
+        fs::write(dir.join("other.txt"), b"nothing to see here").unwrap();
+
+        let mut cache = SearchCache::walk_fs(dir.to_path_buf());
+        let opts = SearchOptions {
+            case_insensitive: false,
+        };
+        let indices = guard_indices(cache.search_with_options(
+            "content:memchr",
+            opts,
+            CancellationToken::noop(),
+        ));
+        assert_eq!(indices.len(), 1);
+        let nodes = cache.expand_file_nodes(&indices);
+        assert!(nodes[0].path.ends_with("notes.txt"));
+
+        let opts = SearchOptions {
+            case_insensitive: true,
+        };
+        let insensitive = guard_indices(cache.search_with_options(
+            "content:MEMCHR",
+            opts,
+            CancellationToken::noop(),
+        ));
+        assert_eq!(insensitive.len(), 1);
+        let nodes = cache.expand_file_nodes(&insensitive);
+        assert!(nodes[0].path.ends_with("notes.txt"));
+    }
+
+    #[test]
+    fn content_filter_matches_across_chunks() {
+        let temp_dir = TempDir::new("content_filter_matches_across_chunks").unwrap();
+        let dir = temp_dir.path();
+
+        let mut payload = vec![b'a'; CONTENT_BUFFER_BYTES.saturating_sub(1)];
+        payload.extend_from_slice(b"XYZ");
+        payload.extend(iter::repeat(b'a').take(32));
+        fs::write(dir.join("large.bin"), &payload).unwrap();
+
+        let mut cache = SearchCache::walk_fs(dir.to_path_buf());
+        let opts = SearchOptions {
+            case_insensitive: false,
+        };
+        let indices = guard_indices(cache.search_with_options(
+            "content:XYZ",
+            opts,
+            CancellationToken::noop(),
+        ));
+        assert_eq!(indices.len(), 1);
+        let nodes = cache.expand_file_nodes(&indices);
+        assert!(nodes.iter().any(|node| node.path.ends_with("large.bin")));
+    }
+
+    #[test]
+    fn content_filter_single_byte_respects_case_sensitivity() {
+        let temp_dir = TempDir::new("content_filter_single_byte_respects_case_sensitivity").unwrap();
+        let dir = temp_dir.path();
+
+        fs::write(dir.join("letters.txt"), b"AaBb").unwrap();
+
+        let mut cache = SearchCache::walk_fs(dir.to_path_buf());
+
+        let insensitive = guard_indices(cache.search_with_options(
+            "content:a",
+            SearchOptions {
+                case_insensitive: true,
+            },
+            CancellationToken::noop(),
+        ));
+        assert_eq!(insensitive.len(), 1);
+
+        let sensitive = guard_indices(cache.search_with_options(
+            "content:a",
+            SearchOptions {
+                case_insensitive: false,
+            },
+            CancellationToken::noop(),
+        ));
+        assert_eq!(sensitive.len(), 1); // File contains lowercase 'a'
+        
+        // But searching for uppercase 'A' case-sensitively should also work
+        let sensitive_upper = guard_indices(cache.search_with_options(
+            "content:A",
+            SearchOptions {
+                case_insensitive: false,
+            },
+            CancellationToken::noop(),
+        ));
+        assert_eq!(sensitive_upper.len(), 1);
+        
+        // Searching for 'z' should return nothing
+        let no_match = guard_indices(cache.search_with_options(
+            "content:z",
+            SearchOptions {
+                case_insensitive: false,
+            },
+            CancellationToken::noop(),
+        ));
+        assert!(no_match.is_empty());
+    }
+
+    #[test]
+    fn content_filter_matches_at_buffer_boundary() {
+        let temp_dir = TempDir::new("content_filter_matches_at_buffer_boundary").unwrap();
+        let dir = temp_dir.path();
+
+        // Place the needle so that it starts at the final byte of the first buffer
+        // read and finishes in the next read.
+        let mut payload = vec![b'a'; CONTENT_BUFFER_BYTES.saturating_sub(1)];
+        payload.push(b'X'); // last byte of first chunk
+        payload.extend_from_slice(b"YZ"); // spans into second chunk
+        payload.extend(iter::repeat(b'a').take(32));
+        fs::write(dir.join("boundary.bin"), &payload).unwrap();
+
+        let mut cache = SearchCache::walk_fs(dir.to_path_buf());
+        let indices = guard_indices(cache.search_with_options(
+            "content:XYZ",
+            SearchOptions {
+                case_insensitive: false,
+            },
+            CancellationToken::noop(),
+        ));
+        assert_eq!(indices.len(), 1);
+        let nodes = cache.expand_file_nodes(&indices);
+        assert!(nodes.iter().any(|node| node.path.ends_with("boundary.bin")));
+    }
+
+    #[test]
+    fn content_filter_matches_when_needle_near_buffer_size() {
+        let temp_dir = TempDir::new("content_filter_matches_when_needle_near_buffer_size").unwrap();
+        let dir = temp_dir.path();
+
+        // Build a long needle that exceeds the base buffer size, then place it once.
+        let needle_len = CONTENT_BUFFER_BYTES + 8;
+        let needle: String = iter::repeat('N').take(needle_len).collect();
+        let needle_bytes = needle.as_bytes();
+
+        let mut payload = Vec::new();
+        payload.extend(iter::repeat(b'a').take(16));
+        payload.extend_from_slice(needle_bytes);
+        payload.extend(iter::repeat(b'b').take(16));
+        fs::write(dir.join("long_needle.bin"), &payload).unwrap();
+
+        let mut cache = SearchCache::walk_fs(dir.to_path_buf());
+        let query = format!("content:{}", needle);
+        let indices = guard_indices(cache.search_with_options(
+            &query,
+            SearchOptions {
+                case_insensitive: false,
+            },
+            CancellationToken::noop(),
+        ));
+        assert_eq!(indices.len(), 1);
+        let nodes = cache.expand_file_nodes(&indices);
+        assert!(nodes.iter().any(|node| node.path.ends_with("long_needle.bin")));
     }
 
     #[test]
