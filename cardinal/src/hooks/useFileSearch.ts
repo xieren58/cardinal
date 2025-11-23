@@ -203,7 +203,6 @@ export function useFileSearch(): UseFileSearchResult {
     const { query, caseSensitive } = nextSearch;
     const startTs = performance.now();
     const isInitial = !hasInitialSearchRunRef.current;
-    const trimmedQuery = query.trim();
 
     dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
 
@@ -243,7 +242,7 @@ export function useFileSearch(): UseFileSearchResult {
         type: 'SEARCH_SUCCESS',
         payload: {
           results: searchResults,
-          query: trimmedQuery,
+          query,
           duration,
           count: searchResults.length,
           highlightTerms,
@@ -300,7 +299,7 @@ export function useFileSearch(): UseFileSearchResult {
       return;
     }
 
-    if (!(latestSearchRef.current.query || '').trim()) {
+    if (!latestSearchRef.current.query) {
       return;
     }
 
