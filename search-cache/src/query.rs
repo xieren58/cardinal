@@ -139,12 +139,7 @@ impl SearchCache {
         options: SearchOptions,
         token: CancellationToken,
     ) -> Result<Option<Vec<SlabIndex>>> {
-        if text.contains('*') || text.contains('?') {
-            let pattern = wildcard_to_regex(text);
-            self.evaluate_regex(&pattern, options, token)
-        } else {
-            self.evaluate_phrase(text, options, token)
-        }
+        self.evaluate_phrase(text, options, token)
     }
 
     fn evaluate_phrase(
@@ -1370,24 +1365,6 @@ fn size_unit_multiplier(unit: &str) -> Result<u64> {
     Ok(multiplier)
 }
 
-fn wildcard_to_regex(pattern: &str) -> String {
-    let mut regex = String::with_capacity(pattern.len() + 2);
-    regex.push('^');
-    for ch in pattern.chars() {
-        match ch {
-            '*' => regex.push_str(".*"),
-            '?' => regex.push('.'),
-            _ => {
-                let mut buf = [0u8; 4];
-                let encoded = ch.encode_utf8(&mut buf);
-                regex.push_str(&regex::escape(encoded));
-            }
-        }
-    }
-    regex.push('$');
-    regex
-}
-
 fn filter_nodes(
     nodes: Vec<SlabIndex>,
     token: CancellationToken,
@@ -1468,19 +1445,4 @@ fn union_in_place(
         }
     }
     Some(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::wildcard_to_regex;
-
-    #[test]
-    fn wildcard_glob_tokens_are_converted() {
-        assert_eq!(wildcard_to_regex("foo*bar?baz"), "^foo.*bar.baz$");
-    }
-
-    #[test]
-    fn wildcard_escapes_regex_characters() {
-        assert_eq!(wildcard_to_regex("file.+(1)"), "^file\\.\\+\\(1\\)$");
-    }
 }

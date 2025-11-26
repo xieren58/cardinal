@@ -1896,6 +1896,119 @@ mod tests {
     }
 
     #[test]
+    fn test_multi_segment_suffix_wildcard_matches_suffix_segments() {
+        let temp_dir = TempDir::new("test_query_multi_segment_suffix_wildcard").unwrap();
+        let root = temp_dir.path();
+        let files = [
+            "alpha_direct/mid_shared/goal.txt",
+            "src_alpha_dir/mid_shared/goal.txt",
+            "beta_segment/mid_shared/goal.txt",
+        ];
+        for relative in files {
+            let full = root.join(relative);
+            fs::create_dir_all(full.parent().unwrap()).unwrap();
+            fs::File::create(&full).unwrap();
+        }
+
+        let mut cache = SearchCache::walk_fs(root.to_path_buf());
+        let results = query(&mut cache, "alpha*/mid_shared/goal.txt");
+        let mut matched: Vec<_> = results
+            .into_iter()
+            .map(|node| {
+                node.path
+                    .strip_prefix(root)
+                    .expect("path inside temp dir")
+                    .to_path_buf()
+            })
+            .collect();
+        matched.sort();
+
+        assert_eq!(matched.len(), 1, "expected one suffix matches");
+        let expected_alpha_direct = std::path::Path::new("alpha_direct")
+            .join("mid_shared")
+            .join("goal.txt");
+        assert!(matched.iter().any(|path| path == &expected_alpha_direct));
+    }
+
+    #[test]
+    fn test_multi_segment_exact_wildcard_matches_middle_segment() {
+        let temp_dir = TempDir::new("test_query_multi_segment_exact_wildcard").unwrap();
+        let root = temp_dir.path();
+        let files = [
+            "work-anchor/mid_release/goal.txt",
+            "work-anchor/mid_research/goal.txt",
+            "work-anchor/mid_exact/goal.txt",
+        ];
+        for relative in files {
+            let full = root.join(relative);
+            fs::create_dir_all(full.parent().unwrap()).unwrap();
+            fs::File::create(&full).unwrap();
+        }
+
+        let mut cache = SearchCache::walk_fs(root.to_path_buf());
+        let results = query(&mut cache, "anchor/mid_re*/goal.txt");
+        let mut matched: Vec<_> = results
+            .into_iter()
+            .map(|node| {
+                node.path
+                    .strip_prefix(root)
+                    .expect("path inside temp dir")
+                    .to_path_buf()
+            })
+            .collect();
+        matched.sort();
+
+        assert_eq!(matched.len(), 2, "expected two middle exact matches");
+        let expected_release = std::path::Path::new("work-anchor")
+            .join("mid_release")
+            .join("goal.txt");
+        let expected_research = std::path::Path::new("work-anchor")
+            .join("mid_research")
+            .join("goal.txt");
+        assert!(matched.iter().any(|path| path == &expected_release));
+        assert!(matched.iter().any(|path| path == &expected_research));
+    }
+
+    #[test]
+    fn test_multi_segment_prefix_wildcard_matches_last_segment() {
+        let temp_dir = TempDir::new("test_query_multi_segment_prefix_wildcard").unwrap();
+        let root = temp_dir.path();
+        let files = [
+            "work-anchor/mid_release/prefix-target-alpha.txt",
+            "work-anchor/mid_release/prefix-target-beta.txt",
+            "work-anchor/mid_release/prefix-tool.txt",
+        ];
+        for relative in files {
+            let full = root.join(relative);
+            fs::create_dir_all(full.parent().unwrap()).unwrap();
+            fs::File::create(&full).unwrap();
+        }
+
+        let mut cache = SearchCache::walk_fs(root.to_path_buf());
+        let results = query(&mut cache, "anchor/mid_release/prefix-target*");
+        let mut matched: Vec<_> = results
+            .into_iter()
+            .map(|node| {
+                node.path
+                    .strip_prefix(root)
+                    .expect("path inside temp dir")
+                    .to_path_buf()
+            })
+            .collect();
+        matched.sort();
+
+        assert_eq!(matched.len(), 2, "expected two prefix matches");
+        let expected_alpha = std::path::Path::new("work-anchor")
+            .join("mid_release")
+            .join("prefix-target-alpha.txt");
+        let expected_beta = std::path::Path::new("work-anchor")
+            .join("mid_release")
+            .join("prefix-target-beta.txt");
+        assert!(matched.iter().any(|path| path == &expected_alpha));
+        assert!(matched.iter().any(|path| path == &expected_beta));
+    }
+
+    #[test]
     fn test_boolean_queries() {
         let temp_dir = TempDir::new("test_boolean_queries").unwrap();
         let root = temp_dir.path();
